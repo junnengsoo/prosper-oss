@@ -99,12 +99,6 @@ class PropertyIn(BaseModel):
 class PropertyMediaIn(BaseModel):
     media_type: MediaType
     file_path: str = Field(min_length=1)
-    storage_provider: str = "local"
-    storage_bucket: Optional[str] = None
-    storage_object_path: Optional[str] = None
-    signed_url: Optional[str] = None
-    signed_url_expires_at: Optional[datetime] = None
-    public_url: Optional[str] = None
     caption: str = ""
     sort_order: int = 0
     enabled: bool = True
@@ -116,20 +110,6 @@ class PropertyMediaIn(BaseModel):
         if not stripped:
             raise ValueError("file_path must not be blank")
         return stripped
-
-    @field_validator("storage_provider")
-    @classmethod
-    def storage_provider_normalized(cls, value: str) -> str:
-        stripped = value.strip().lower()
-        return stripped or "local"
-
-    @field_validator("storage_bucket", "storage_object_path", "signed_url", "public_url")
-    @classmethod
-    def optional_storage_text_normalized(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        stripped = value.strip()
-        return stripped or None
 
     @field_validator("caption")
     @classmethod

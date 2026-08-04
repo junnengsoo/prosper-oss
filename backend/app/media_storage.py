@@ -1,107 +1,109 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime, timezone
+import mimetypes
 from pathlib import Path
-from typing import Protocol
+import re
+import secrets
+from typing import BinaryIO, Protocol
+
+from .config import get_settings
 
 
 class MediaStorageRecord(Protocol):
     file_path: str
-    storage_provider: str
-    storage_bucket: str | None
-    storage_object_path: str | None
-    signed_url: str | None
-    signed_url_expires_at: datetime | None
-    public_url: str | None
+
+
+@dataclass(frozen=True)
+class StoredMediaFile:
+    file_path: str
 
 
 @dataclass(frozen=True)
 class MediaStorageDescriptor:
-    provider: str
     file_path: str
-    storage_bucket: str | None
-    storage_object_path: str | None
-    signed_url: str | None
-    signed_url_expires_at: datetime | None
-    public_url: str | None
     local_file_exists: bool
     send_url: str
     display_reference: str
     sendable: bool
 
-    @property
-    def uses_remote_url(self) -> bool:
-        return self.send_url != self.file_path
+
+def media_root() -> Path:
+    root = get_settings().media_root.expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
-def normalize_storage_provider(value: str | None) -> str:
-    provider = (value or "local").strip().lower()
-    return provider or "local"
+def _safe_component(value: str, fallback: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip(".-")
+    return normalized or fallback
 
 
-def normalize_optional_text(value: str | None) -> str | None:
-    if value is None:
-        return None
-    stripped = value.strip()
-    return stripped or None
+def _safe_filename(value: str) -> str:
+    name = Path(value or "property-media").name
+    stem = _safe_component(Path(name).stem, "property-media")
+    suffix = Path(name).suffix.lower()
+    return f"{stem}{suffix}"
+
+
+def store_uploaded_file(
+    source: BinaryIO,
+    *,
+    property_id: str,
+    filename: str,
+    max_bytes: int | None = None,
+) -> StoredMediaFile:
+    target_dir = media_root() / "properties" / _safe_component(property_id, "property")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{secrets.token_hex(8)}-{_safe_filename(filename)}"
+    temporary = target.with_suffix(f"{target.suffix}.uploading")
+    limit = max_bytes if max_bytes is not None else get_settings().media_max_upload_bytes
+    written_bytes = 0
+    try:
+        with temporary.open("wb") as output:
+            while chunk := source.read(1024 * 1024):
+                written_bytes += len(chunk)
+                if written_bytes > limit:
+                    raise ValueError(f"upload file exceeds limit of {limit} bytes")
+                output.write(chunk)
+        temporary.replace(target)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
+        raise
+    return StoredMediaFile(file_path=str(target))
+
+
+def _path_inside_media_root(file_path: str | Path) -> Path:
+    path = Path(file_path).expanduser().resolve()
+    try:
+        path.relative_to(media_root())
+    except ValueError as error:
+        raise ValueError("media file must be inside the configured media root") from error
+    return path
+
+
+def delete_stored_file(file_path: str) -> bool:
+    path = _path_inside_media_root(file_path)
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError("media path is not a file")
+    path.unlink()
+    return True
 
 
 def describe_media_storage(record: MediaStorageRecord) -> MediaStorageDescriptor:
-    provider = normalize_storage_provider(getattr(record, "storage_provider", None))
-    file_path = (getattr(record, "file_path", "") or "").strip()
-    storage_bucket = normalize_optional_text(getattr(record, "storage_bucket", None))
-    storage_object_path = normalize_optional_text(getattr(record, "storage_object_path", None))
-    signed_url = normalize_optional_text(getattr(record, "signed_url", None))
-    signed_url_expires_at = getattr(record, "signed_url_expires_at", None)
-    public_url = normalize_optional_text(getattr(record, "public_url", None))
-
-    usable_signed_url = signed_url if signed_url and not signed_url_is_expired(signed_url_expires_at) else None
-    send_url = usable_signed_url or public_url or file_path
+    file_path = (record.file_path or "").strip()
     local_file_exists = bool(file_path) and Path(file_path).is_file()
-    sendable = bool(usable_signed_url or public_url or local_file_exists)
-
     return MediaStorageDescriptor(
-        provider=provider,
         file_path=file_path,
-        storage_bucket=storage_bucket,
-        storage_object_path=storage_object_path,
-        signed_url=signed_url,
-        signed_url_expires_at=signed_url_expires_at,
-        public_url=public_url,
         local_file_exists=local_file_exists,
-        send_url=send_url,
-        display_reference=media_display_reference(
-            provider=provider,
-            file_path=file_path,
-            storage_bucket=storage_bucket,
-            storage_object_path=storage_object_path,
-            signed_url=signed_url,
-            public_url=public_url,
-        ),
-        sendable=sendable,
+        send_url=file_path,
+        display_reference=file_path,
+        sendable=local_file_exists,
     )
 
 
-def signed_url_is_expired(expires_at: datetime | None) -> bool:
-    if expires_at is None:
-        return False
-    now = datetime.now(timezone.utc)
-    comparable = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
-    return comparable <= now
-
-
-def media_display_reference(
-    *,
-    provider: str,
-    file_path: str,
-    storage_bucket: str | None,
-    storage_object_path: str | None,
-    signed_url: str | None,
-    public_url: str | None,
-) -> str:
-    if provider != "local" and storage_bucket and storage_object_path:
-        return f"{provider}://{storage_bucket}/{storage_object_path}"
-    if public_url:
-        return public_url
-    if signed_url:
-        return f"{provider or 'remote'} signed URL"
-    return file_path
+def media_content_type(file_path: str) -> str:
+    return mimetypes.guess_type(file_path)[0] or "application/octet-stream"

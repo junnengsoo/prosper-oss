@@ -11,9 +11,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 import app.auth as auth_module
-from app.db import Base
+from app.database.connection import Base
 from app.main import app, get_session
-from app.seed import seed_all
+from app.database.seed import seed_all
 
 
 @pytest.fixture

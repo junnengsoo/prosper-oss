@@ -4,9 +4,9 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .config import get_settings
+from ..config import get_settings
 from .models import AppConfig, Property
-from .playbooks import ensure_starter_property_playbook
+from ..playbooks import ensure_starter_property_playbook
 
 
 SEED_DATA_DIR = Path(__file__).resolve().parent / "seed_data"

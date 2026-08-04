@@ -1,4 +1,4 @@
-from .models import Property
+from .database.models import Property
 
 
 def render_property_facts(property_: Property) -> str:

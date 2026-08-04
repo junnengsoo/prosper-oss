@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Contact, Conversation, Message, StageRun
+from .database.models import Contact, Conversation, Message, StageRun
 
 
 def badge(value: object, tone: str = "neutral") -> str:
@@ -55,15 +55,12 @@ def render_runtime_cards(runtime: dict[str, Any]) -> str:
     config = runtime.get("config", {})
     bridge = runtime.get("bridge", {})
     llm = runtime.get("llm", {})
-    summary = runtime.get("summary", {})
-    warnings = runtime.get("warnings") or []
 
     cards = [
         ("AI", "Paused" if config.get("pause_ai") == "true" else "Running", "bad" if config.get("pause_ai") == "true" else "good"),
         ("Sending", "Locked" if config.get("send_lock") == "true" else "Open", "bad" if config.get("send_lock") == "true" else "good"),
         ("WhatsApp", bridge.get("connection", "offline"), status_tone(bridge.get("connection"))),
         ("DeepSeek", "Ready" if llm.get("configured") else "Missing", "good" if llm.get("configured") else "bad"),
-        ("Warnings", str(len(warnings)), "bad" if warnings else "good"),
     ]
     html = ['<section class="cards">']
     for label, value, tone in cards:
@@ -74,28 +71,6 @@ def render_runtime_cards(runtime: dict[str, Any]) -> str:
             "</article>"
         )
     html.append("</section>")
-
-    counts = [
-        ("Properties", summary.get("properties", {}).get("total", 0), f"{summary.get('properties', {}).get('available', 0)} available"),
-        ("Contacts", summary.get("contacts", {}).get("total", 0), f"{summary.get('contacts', {}).get('active', 0)} active"),
-        ("Conversations", summary.get("conversations", {}).get("total", 0), f"{summary.get('conversations', {}).get('active', 0)} active"),
-        ("Stage runs", summary.get("stage_runs", {}).get("total", 0), f"{summary.get('stage_runs', {}).get('success', 0)} success"),
-    ]
-    html.append('<section class="cards compact">')
-    for label, value, detail in counts:
-        html.append(
-            '<article class="metric">'
-            f'<div class="metric-label">{escape(label)}</div>'
-            f'<div class="count">{escape(str(value))}</div>'
-            f'<div class="muted">{escape(detail)}</div>'
-            "</article>"
-        )
-    html.append("</section>")
-    if warnings:
-        html.append('<section class="panel"><h2>Warnings</h2><ul>')
-        for warning in warnings:
-            html.append(f"<li>{escape(str(warning.get('message', warning)))}</li>")
-        html.append("</ul></section>")
     return "\n".join(html)
 
 

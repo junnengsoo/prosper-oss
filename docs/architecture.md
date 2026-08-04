@@ -5,10 +5,12 @@ Prosper is organized around a shared backend workflow with separate channel and 
 ## Components
 
 - `backend/app/pipeline.py` coordinates triage, property matching, and qualification stages.
-- `backend/app/models.py` stores contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state in one application scope.
+- `backend/app/database/models.py` stores contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state in one application scope.
+- `backend/app/database/connection.py` owns the SQLAlchemy engine, sessions, and table creation; `backend/app/database/seed.py` owns demo data.
 - `backend/app/schemas.py` defines the validated request and stage-result contracts.
 - `backend/app/actions.py` turns validated stage results into deterministic outbound actions.
 - `backend/app/services.py` owns message ingestion, deduplication, state checks, and bridge retries.
+- `backend/app/media_storage.py` stores uploaded property media under the configured runtime directory and serves it through the authenticated API.
 - `frontend/` provides the inbox, configuration screens, audit views, and fake-chat simulator.
 - `bridge/` adapts Baileys WhatsApp events into the backend message contract and forwards outbound actions.
 - `backend/app/auth.py` protects the dashboard with a signed single-user session cookie; bridge requests use a separate bridge token.

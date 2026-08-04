@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  apiUrl,
   type Contact,
   type Conversation,
   type Me,
@@ -376,7 +377,7 @@ function truncate(value: string | null | undefined, length = 90): string {
 
 function mediaSrc(media?: PropertyMedia): string | undefined {
   if (!media) return undefined;
-  return media.signed_url || media.public_url || undefined;
+  return apiUrl(`/api/property-media/${media.id}/content`);
 }
 
 function stageSummary(run?: StageRun | null): string {

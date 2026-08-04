@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -15,12 +14,12 @@ from sqlalchemy.pool import StaticPool
 from app.actions import execute_outbound_action_plan, plan_outbound_actions
 from app.auth import CurrentUser, RequestContext, current_user_from_session
 from app.config import get_settings
-from app.db import Base
-from app.models import Message, Property, PropertyMedia, PropertyPlaybook, StageRun
+from app.database.connection import Base
+from app.database.models import Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
 from app.schemas import BridgeInboundMessage, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
-from app.seed import seed_all
+from app.database.seed import seed_all
 from app.services import (
     append_message,
     delete_properties,
@@ -216,6 +215,46 @@ def test_bulk_delete_properties_is_all_or_nothing(session):
 
     assert session.scalar(select(Property).where(Property.property_id == property_.property_id)) is not None
     assert session.scalar(select(PropertyMedia).where(PropertyMedia.property_id == property_.property_id)) is not None
+
+
+def test_media_upload_route_stores_and_serves_runtime_file(session, monkeypatch, tmp_path):
+    import app.main as main_module
+    from app.database.models import PropertyMedia
+    from fastapi.testclient import TestClient
+
+    property_ = add_property(session, "RTF-MEDIA")
+    session.commit()
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path / "media"))
+    get_settings.cache_clear()
+
+    def override_session():
+        yield session
+
+    main_module.app.dependency_overrides[main_module.get_session] = override_session
+    try:
+        client = TestClient(main_module.app)
+        uploaded = client.post(
+            f"/api/properties/{property_.property_id}/media/upload",
+            data={"media_type": "photo", "caption": "living room", "sort_order": "1", "enabled": "true"},
+            files={"file": ("living room.jpg", b"image-bytes", "image/jpeg")},
+        )
+        assert uploaded.status_code == 200
+        media = uploaded.json()
+        media_path = Path(media["file_path"])
+        assert media_path.is_file()
+
+        content = client.get(f"/api/property-media/{media['id']}/content")
+        assert content.status_code == 200
+        assert content.content == b"image-bytes"
+
+        deleted = client.delete(f"/api/property-media/{media['id']}")
+        assert deleted.status_code == 200
+        assert not media_path.exists()
+        assert session.get(PropertyMedia, media["id"]) is None
+    finally:
+        main_module.app.dependency_overrides.pop(main_module.get_session, None)
+        get_settings.cache_clear()
 
 
 def test_whatsapp_connection_proxy_states_and_reconnect(session, monkeypatch):
@@ -515,56 +554,6 @@ def test_text_only_playbook_does_not_validate_broken_gallery_media(session, monk
 
     assert result["send_result"]["status"] == "sent"
     assert outbound_texts(session, conversation.id) == ["Hi 301C Punggol Central"]
-
-
-def test_expired_supabase_gallery_url_is_refreshed_before_send(session, monkeypatch):
-    property_ = add_property(session, "RTF-001")
-    media = PropertyMedia(
-        property_id=property_.property_id,
-        media_type="video",
-        file_path="/tmp/no-longer-present.mp4",
-        storage_provider="supabase",
-        storage_bucket="property-media",
-        storage_object_path="RTF-001/tour.mp4",
-        signed_url="https://example.supabase.co/expired",
-        signed_url_expires_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        caption="tour",
-        sort_order=1,
-        enabled=True,
-    )
-    session.add(media)
-    upsert_property_playbook(
-        session,
-        property_.property_id,
-        PropertyPlaybookIn(
-            initial_reply_blocks=[
-                {"type": "message", "text": "Hi {property_name}"},
-                {"type": "gallery", "mode": "enabled_property_gallery"},
-            ]
-        ),
-    )
-    conversation = add_whatsapp_conversation(session)
-    session.commit()
-
-    async def fake_send(chat_jid: str, text: str, bridge_base_url: str | None = None) -> str:
-        return f"text-{len(text)}"
-
-    async def fake_send_media(chat_jid: str, media: PropertyMedia, bridge_base_url: str | None = None) -> str:
-        assert media.signed_url == "https://example.supabase.co/fresh"
-        return "media-1"
-
-    monkeypatch.setattr("app.actions.send_via_bridge", fake_send)
-    monkeypatch.setattr("app.actions.send_property_media_via_bridge", fake_send_media)
-    monkeypatch.setattr(
-        "app.actions.create_signed_url_for_supabase_object",
-        lambda object_path, config=None: ("https://example.supabase.co/fresh", datetime(2099, 7, 27, tzinfo=timezone.utc)),
-    )
-
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
-
-    assert result["send_result"]["status"] == "sent"
-    assert media.signed_url == "https://example.supabase.co/fresh"
-    assert outbound_texts(session, conversation.id) == ["Hi 301C Punggol Central", "[video] supabase://property-media/RTF-001/tour.mp4"]
 
 
 def test_playbook_uses_only_explicit_delay_blocks(session, monkeypatch):

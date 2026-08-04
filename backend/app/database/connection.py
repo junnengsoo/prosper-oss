@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from .config import RUNTIME_DIR, get_settings
+from ..config import RUNTIME_DIR, get_settings
 
 
 class Base(DeclarativeBase):

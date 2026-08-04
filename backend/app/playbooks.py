@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Property, PropertyPlaybook
+from .database.models import Property, PropertyPlaybook
 from .schemas import PlaybookBlock, PropertyPlaybookIn
 from .app_config import get_config_value
 

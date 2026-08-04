@@ -17,6 +17,7 @@ It demonstrates how to combine a language model with explicit application state,
 - human pause, takeover, and handoff
 - stage-run audit records
 - a local simulator for repeatable testing
+- local property-media uploads stored under `runtime/media`
 - an optional WhatsApp bridge using Baileys
 - a small single-user dashboard auth flow using signed HTTP-only cookies
 

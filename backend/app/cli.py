@@ -5,9 +5,9 @@ from collections.abc import Sequence
 
 from sqlalchemy import select
 
-from .db import SessionLocal, init_db
-from .models import PropertyPlaybook
-from .seed import DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS, seed_all, seed_property_playbooks
+from .database.connection import SessionLocal, init_db
+from .database.models import PropertyPlaybook
+from .database.seed import DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS, seed_all, seed_property_playbooks
 from .services import get_all_config, update_config
 
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .media_storage import describe_media_storage
-from .models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
+from .database.models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from .normalize import extract_propertyguru_listing_id, is_configured_auto_greeting
 from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn
 from .app_config import get_config_value

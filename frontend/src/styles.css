@@ -984,8 +984,7 @@ textarea:focus {
   gap: 14px;
 }
 
-.listingMeta div,
-.readinessItem {
+.listingMeta div {
   background: var(--surface-low);
   padding: 12px;
   border-radius: 6px;
@@ -1381,26 +1380,6 @@ textarea:focus {
 
 .autoPreviewPane .phoneComposer {
   height: 42px;
-}
-
-.readinessGrid {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.readinessItem {
-  display: grid;
-  gap: 8px;
-}
-
-.readinessItem.ready svg {
-  color: var(--green-dark);
-}
-
-.readinessItem.notReady svg {
-  color: var(--warning);
 }
 
 /* Playbook */

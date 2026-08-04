@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import AppConfig
+from .database.models import AppConfig
 
 
 def get_config_value(session: Session, key: str, default: str = "") -> str:

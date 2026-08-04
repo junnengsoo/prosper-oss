@@ -5,8 +5,8 @@ from typing import Optional
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, and_, func, text
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
-from .db import Base
-from .media_storage import describe_media_storage
+from .connection import Base
+from ..media_storage import describe_media_storage
 
 
 class TimestampMixin:
@@ -137,12 +137,6 @@ class PropertyMedia(TimestampMixin, Base):
     property_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     media_type: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
-    storage_provider: Mapped[str] = mapped_column(String, default="local", nullable=False)
-    storage_bucket: Mapped[Optional[str]] = mapped_column(String)
-    storage_object_path: Mapped[Optional[str]] = mapped_column(Text)
-    signed_url: Mapped[Optional[str]] = mapped_column(Text)
-    signed_url_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    public_url: Mapped[Optional[str]] = mapped_column(Text)
     caption: Mapped[str] = mapped_column(Text, default="", nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

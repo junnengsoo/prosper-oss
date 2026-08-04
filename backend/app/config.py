@@ -40,10 +40,8 @@ class Settings(BaseSettings):
     session_secret: str = ""
     session_ttl_seconds: int = 60 * 60 * 24
     auth_cookie_secure: bool = False
-    supabase_url: str = ""
-    supabase_secret_key: str = ""
-    supabase_storage_bucket: str = "property-media"
-    supabase_max_upload_bytes: int = 100 * 1024 * 1024
+    media_root: Path = RUNTIME_DIR / "media"
+    media_max_upload_bytes: int = 100 * 1024 * 1024
     seed_properties: bool = True
     whatsapp_auto_greeting_text: str = "Thank you for contacting Prosper. Please let us know how we can help you."
 

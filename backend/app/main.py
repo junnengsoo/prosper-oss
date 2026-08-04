@@ -1,16 +1,14 @@
 import json
 import logging
-from dataclasses import replace
 from datetime import datetime
 from hmac import compare_digest
 from pathlib import Path
-import tempfile
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,8 +22,8 @@ from .auth import (
     verify_access_password,
 )
 from .config import get_settings
-from .db import SessionLocal, get_session, init_db
-from .models import Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
+from .database.connection import SessionLocal, get_session, init_db
+from .database.models import Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from .schemas import (
     AppConfigOut,
     AppConfigUpdate,
@@ -71,16 +69,9 @@ from .playbooks import (
     list_property_playbooks,
     upsert_property_playbook,
 )
-from .readiness import runtime_summary, runtime_warnings
-from .seed import seed_all
+from .database.seed import seed_all
 from .status_page import render_demo_conversation, render_demo_overview
-from .supabase_storage import (
-    SupabaseStorageError,
-    build_property_media_object_path,
-    delete_file_from_supabase_storage,
-    supabase_storage_config_from_settings,
-    upload_file_to_supabase_storage,
-)
+from .media_storage import delete_stored_file, describe_media_storage, media_content_type, store_uploaded_file
 from .services import (
     append_message,
     cancel_contact,
@@ -415,8 +406,6 @@ async def runtime_status(
     return {
         "app": "whatsapp-pa",
         "config": get_all_config(session),
-        "summary": runtime_summary(session),
-        "warnings": runtime_warnings(session),
         "llm": llm_status(),
         "bridge": await fetch_bridge_status(get_settings().bridge_base_url),
     }
@@ -606,64 +595,38 @@ def upload_property_media_route(
         raise HTTPException(status_code=404, detail="Property not found")
 
     filename = Path(file.filename or "property-media").name
-    object_path = build_property_media_object_path(
-        property_id,
-        f"{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}-{filename}",
-    )
-    suffix = Path(filename).suffix
-    temp_path: Path | None = None
-    written_bytes = 0
+    stored_path: str | None = None
     try:
-        storage_config = supabase_storage_config_from_settings()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            temp_path = Path(temp_file.name)
-            while chunk := file.file.read(1024 * 1024):
-                written_bytes += len(chunk)
-                if written_bytes > storage_config.max_upload_bytes:
-                    raise ValueError(f"upload file exceeds limit of {storage_config.max_upload_bytes} bytes")
-                temp_file.write(chunk)
-
-        uploaded = upload_file_to_supabase_storage(
-            temp_path,
-            object_path,
-            config=storage_config,
-            content_type=file.content_type,
+        stored = store_uploaded_file(
+            file.file,
+            property_id=property_id,
+            filename=filename,
+            max_bytes=get_settings().media_max_upload_bytes,
         )
+        stored_path = stored.file_path
         media = upsert_property_media(
             session,
             property_id,
             PropertyMediaIn(
                 media_type=media_type,
+                file_path=stored.file_path,
                 caption=caption,
                 sort_order=sort_order,
                 enabled=enabled,
-                **uploaded.as_property_media_values(),
             ),
         )
     except ValueError as error:
         logger.info(
-            "Property media upload rejected property_id=%s filename=%s bytes=%s object_path=%s error=%s",
+            "Property media upload rejected property_id=%s filename=%s error=%s",
             property_id,
             filename,
-            written_bytes,
-            object_path,
             error,
         )
+        if stored_path:
+            delete_stored_file(stored_path)
         raise HTTPException(status_code=400, detail=str(error)) from error
-    except SupabaseStorageError as error:
-        logger.warning(
-            "Supabase Storage upload failed property_id=%s filename=%s bytes=%s object_path=%s error=%s",
-            property_id,
-            filename,
-            written_bytes,
-            object_path,
-            error,
-        )
-        raise HTTPException(status_code=502, detail=str(error)) from error
     finally:
         file.file.close()
-        if temp_path and temp_path.exists():
-            temp_path.unlink()
 
     session.commit()
     session.refresh(media)
@@ -680,27 +643,34 @@ def delete_property_media_route(
     if not media:
         raise HTTPException(status_code=404, detail="Property media not found")
 
-    if media.storage_provider == "supabase" and media.storage_object_path:
-        storage_config = supabase_storage_config_from_settings()
-        if media.storage_bucket:
-            storage_config = replace(storage_config, bucket=media.storage_bucket)
-        try:
-            delete_file_from_supabase_storage(media.storage_object_path, config=storage_config)
-        except (ValueError, SupabaseStorageError) as error:
-            logger.warning(
-                "Supabase Storage delete failed media_id=%s bucket=%s object_path=%s error=%s",
-                media.id,
-                media.storage_bucket,
-                media.storage_object_path,
-                error,
-            )
-            raise HTTPException(status_code=502, detail=str(error)) from error
-    elif media.storage_provider == "supabase":
-        logger.warning("Supabase media row missing object path; deleting database row only media_id=%s", media.id)
+    try:
+        delete_stored_file(media.file_path)
+    except ValueError:
+        logger.info("Media path is outside managed runtime storage; deleting database row only media_id=%s", media.id)
 
     media = delete_property_media(session, media_id)
     session.commit()
     return media
+
+
+@app.get("/api/property-media/{media_id}/content")
+def serve_property_media(
+    media_id: int,
+    session: Session = Depends(get_session),
+    _context: RequestContext = DashboardContext,
+) -> FileResponse:
+    media = session.get(PropertyMedia, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="Property media not found")
+    descriptor = describe_media_storage(media)
+    if not descriptor.local_file_exists:
+        raise HTTPException(status_code=404, detail="Media file not found")
+    try:
+        media_path = Path(media.file_path).expanduser().resolve()
+        media_path.relative_to(get_settings().media_root.expanduser().resolve())
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail="Media file is outside managed storage") from error
+    return FileResponse(media_path, media_type=media_content_type(str(media_path)), filename=media_path.name)
 
 
 @app.get("/api/contacts", response_model=list[ContactOut])

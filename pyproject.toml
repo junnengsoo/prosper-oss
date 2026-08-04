@@ -32,4 +32,4 @@ where = ["backend"]
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["seed_data/*.json"]
+app = ["database/seed_data/*.json"]

@@ -7,12 +7,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db import Base
-from app.models import Conversation, StageRun
+from app.database.connection import Base
+from app.database.models import Conversation, StageRun
 from app.qualification import QualificationLoop, QualificationOutputError, QualificationState
 from app.pipeline import run_qualification
 from app.schemas import PropertyIn
-from app.seed import seed_all
+from app.database.seed import seed_all
 from app.services import append_message, get_or_create_active_conversation, get_or_create_contact, upsert_property
 
 

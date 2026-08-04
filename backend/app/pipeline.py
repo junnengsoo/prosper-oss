@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .llm import LlmMessage, LlmNotConfiguredError, LlmProviderError, generate_json
-from .models import Contact, Conversation, Message, Property, StageRun
+from .database.models import Contact, Conversation, Message, Property, StageRun
 from .property_context import render_property_context, render_property_facts, render_qualification_property_context
 from .prompts import get_prompt
 from .qualification import QualificationLoop, QualificationOutputError

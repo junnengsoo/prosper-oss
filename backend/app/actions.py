@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict, dataclass
-from dataclasses import replace
 from datetime import datetime
 import json
 from typing import Any
@@ -11,14 +10,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .media_storage import describe_media_storage
-from .models import Contact, Conversation, Message, Property, PropertyMedia
+from .database.models import Contact, Conversation, Message, Property, PropertyMedia
 from .playbooks import (
     RenderedPlaybookPart,
     enabled_blocks_for_stage,
     get_property_playbook,
     render_playbook_blocks,
 )
-from .supabase_storage import create_signed_url_for_supabase_object, supabase_storage_config_from_settings
 from .services import (
     append_message,
     bridge_base_url_for_conversation,
@@ -189,7 +187,7 @@ def _qualification_message_action(
 def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str, Any], session: Session | None = None) -> list[OutboundAction]:
     """Plan deterministic outbound actions from AI stage outputs."""
     if session is None:
-        from .db import SessionLocal
+        from .database.connection import SessionLocal
 
         with SessionLocal() as transient_session:
             return plan_outbound_actions(conversation, pipeline_result, transient_session)
@@ -321,7 +319,7 @@ def _auto_reply_already_sent(session: Session, conversation: Conversation) -> bo
 
 def _record_outbound_action_audit(session: Session, conversation: Conversation, result: dict[str, Any]) -> None:
     """Persist the outbound decision so skipped and blocked sends are debuggable later."""
-    from .models import StageRun
+    from .database.models import StageRun
 
     run = StageRun(
         conversation_id=conversation.id,
@@ -347,25 +345,6 @@ def _sendable_property_media(media_items: list[PropertyMedia]) -> tuple[list[Pro
     return sendable, missing
 
 
-def _refresh_supabase_media_urls(session: Session, media_items: list[PropertyMedia]) -> None:
-    """Refresh expired Supabase signed URLs so uploaded media remains sendable."""
-    refreshed = False
-    base_config = None
-    for media in media_items:
-        descriptor = describe_media_storage(media)
-        if descriptor.sendable or descriptor.provider != "supabase" or not descriptor.storage_object_path:
-            continue
-        if base_config is None:
-            base_config = supabase_storage_config_from_settings()
-        config = replace(base_config, bucket=descriptor.storage_bucket or base_config.bucket)
-        signed_url, expires_at = create_signed_url_for_supabase_object(descriptor.storage_object_path, config=config)
-        media.signed_url = signed_url
-        media.signed_url_expires_at = expires_at
-        refreshed = True
-    if refreshed:
-        session.flush()
-
-
 async def _send_action(
     session: Session,
     conversation: Conversation,
@@ -378,7 +357,6 @@ async def _send_action(
         return SentActionResult("skipped", action.to_dict(), "empty_action_text")
 
     if conversation.source != "fake_chat":
-        _refresh_supabase_media_urls(session, media_items)
         _, missing_media = _sendable_property_media(media_items)
         if missing_media:
             return SentActionResult("blocked", action.to_dict(), "media_file_missing: " + ", ".join(missing_media))

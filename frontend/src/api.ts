@@ -1,7 +1,7 @@
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const API_BASE = viteEnv.VITE_API_BASE ?? (viteEnv.DEV ? "http://127.0.0.1:8000" : "/api");
 
-function apiUrl(path: string): string {
+export function apiUrl(path: string): string {
   const base = API_BASE.replace(/\/$/, "");
   if ((base === "/api" || base.endsWith("/api")) && path.startsWith("/api/")) {
     return `${base}${path.slice(4)}`;
@@ -54,12 +54,6 @@ export type PropertyMedia = {
   property_id: string;
   media_type: "photo" | "video";
   file_path: string;
-  storage_provider?: string | null;
-  storage_bucket?: string | null;
-  storage_object_path?: string | null;
-  signed_url?: string | null;
-  signed_url_expires_at?: string | null;
-  public_url?: string | null;
   file_exists?: boolean;
   sendable?: boolean;
   storage_reference?: string;
@@ -161,18 +155,6 @@ export type PipelineInspection = {
 export type RuntimeStatus = {
   app: string;
   config: Record<string, string>;
-  summary?: {
-    playbooks?: { total: number; enabled: number };
-    properties?: { total: number; available: number; unavailable: number; unknown: number };
-    media?: { total: number; enabled: number };
-    contacts?: { total: number; active: number; paused: number; ignored: number };
-    conversations?: { total: number; active: number; closed: number; handover: number; paused: number };
-  };
-  warnings?: Array<{
-    code: string;
-    severity: string;
-    message: string;
-  }>;
   llm?: {
     provider: string;
     configured: boolean;
