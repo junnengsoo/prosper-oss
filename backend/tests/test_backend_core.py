@@ -451,32 +451,6 @@ def test_initial_reply_sends_nothing_when_no_explicit_playbook(session):
     assert outbound_texts(session, conversation.id) == []
 
 
-def test_default_auto_greeting_is_ignored_even_when_configured_text_differs(session):
-    contact = get_or_create_contact(session, "tenant@s.whatsapp.net", "Tenant")
-    get_or_create_active_conversation(session, contact, "whatsapp")
-    session.commit()
-
-    accepted, reason, data = handle_bridge_inbound(
-        session,
-        BridgeInboundMessage(
-            chat_jid="tenant@s.whatsapp.net",
-            sender_jid="me@s.whatsapp.net",
-            message_id="default-greeting-1",
-            timestamp_ms=1_000,
-            from_me=True,
-            text="Thank you for contacting the property assistant. Please let us know how we can help you.",
-            raw_type="conversation",
-        ),
-    )
-
-    session.refresh(contact)
-    assert accepted is True
-    assert reason == "whatsapp_auto_greeting_ignored"
-    assert data["contact_id"] == contact.id
-    assert contact.status == "active"
-    assert outbound_texts(session, contact.conversations[0].id) == []
-
-
 def test_auto_reply_only_sends_once_per_conversation(session):
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(

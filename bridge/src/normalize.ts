@@ -19,16 +19,6 @@ export type MessageDropReason =
   | "missing_timestamp"
   | "old_backfill";
 
-export const DEFAULT_AUTO_GREETING_TEXT = "Thank you for contacting the property assistant. Please let us know how we can help you.";
-
-function normalizeComparableText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-export function isDefaultAutoGreeting(text: string): boolean {
-  return normalizeComparableText(text) === normalizeComparableText(DEFAULT_AUTO_GREETING_TEXT);
-}
-
 function timestampToMs(value: WAMessage["messageTimestamp"]): number {
   if (typeof value === "number") return value * 1000;
   if (typeof value === "string") {

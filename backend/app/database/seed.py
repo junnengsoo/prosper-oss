@@ -37,7 +37,6 @@ def seed_app_config(session: Session) -> None:
     defaults = {
         "pause_ai": "false",
         "send_lock": "false",
-        "whatsapp_auto_greeting_text": get_settings().whatsapp_auto_greeting_text,
         "profile_form": DEFAULT_PROFILE_FORM,
     }
     for key, value in defaults.items():

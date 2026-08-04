@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { dropReasonForMessage, isDefaultAutoGreeting, type NormalizedMessage } from "../src/normalize.js";
+import { dropReasonForMessage, type NormalizedMessage } from "../src/normalize.js";
 
 function message(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
   return {
@@ -31,10 +31,4 @@ assert.equal(
   "old_backfill",
 );
 assert.equal(dropReasonForMessage(message({ timestampMs: startedAtMs - maxBackfillMs }), startedAtMs, maxBackfillMs), null);
-assert.equal(
-  isDefaultAutoGreeting("Thank you for contacting the property assistant. Please let us know how we can help you."),
-  true,
-);
-assert.equal(isDefaultAutoGreeting("I will handle this one manually."), false);
-
 console.log("bridge normalize tests passed");

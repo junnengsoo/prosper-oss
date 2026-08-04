@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .media_storage import describe_media_storage
 from .database.models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
-from .normalize import extract_propertyguru_listing_id, is_configured_auto_greeting
+from .normalize import extract_propertyguru_listing_id
 from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn
 from .app_config import get_config_value
 MESSAGE_BREAK_MARKER = "<message_break>"
@@ -210,10 +210,6 @@ def handle_bridge_inbound(session: Session, payload: BridgeInboundMessage) -> tu
     if payload.from_me and stored_message_exists(session, payload.chat_jid, payload.message_id):
         return True, "duplicate_from_me_ignored", {"contact_id": contact.id}
     contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms)
-
-    auto_greeting = get_config_value(session, "whatsapp_auto_greeting_text")
-    if payload.from_me and is_configured_auto_greeting(payload.text, auto_greeting):
-        return True, "whatsapp_auto_greeting_ignored", {"contact_id": contact.id}
 
     conversation = get_active_conversation(session, contact.id)
 
@@ -476,7 +472,7 @@ def validate_config_update(values: dict[str, str]) -> dict[str, str]:
             continue
         if normalized_key in REQUIRED_NONBLANK_CONFIG_KEYS and not normalized_value.strip():
             raise ValueError(f"{normalized_key} must not be blank")
-        normalized[normalized_key] = normalized_value.strip() if normalized_key == "whatsapp_auto_greeting_text" else normalized_value
+        normalized[normalized_key] = normalized_value
     return normalized
 
 

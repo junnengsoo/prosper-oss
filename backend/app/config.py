@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     media_root: Path = RUNTIME_DIR / "media"
     media_max_upload_bytes: int = 100 * 1024 * 1024
     seed_properties: bool = True
-    whatsapp_auto_greeting_text: str = "Thank you for contacting Prosper. Please let us know how we can help you."
 
 
 @lru_cache

@@ -30,7 +30,6 @@ import {
 import { fetchBridgeChatState, postInboundBatch } from "./backend.js";
 import {
   dropReasonForMessage,
-  isDefaultAutoGreeting,
   normalizeMessage,
   type MessageDropReason,
   type NormalizedMessage,
@@ -757,11 +756,6 @@ async function bufferMessage(message: WAMessage): Promise<void> {
   const dropReason = dropReasonForMessage(normalized, bridgeStartedAtMs, WHATSAPP_MAX_BACKFILL_MS);
   if (dropReason) {
     recordDroppedMessage(dropReason, normalized);
-    return;
-  }
-
-  if (normalized.fromMe && isDefaultAutoGreeting(normalized.text)) {
-    console.log(`[bridge] ignored WhatsApp auto-greeting chat=${normalized.chatJid} id=${normalized.messageId}`);
     return;
   }
 
