@@ -4,7 +4,7 @@ Prosper separates deterministic correctness checks from model-quality checks.
 
 ## Deterministic Tests
 
-- backend tests cover workspace scoping, state transitions, deduplication, Playbooks, actions, retries, and storage boundaries;
+- backend tests cover state transitions, deduplication, Playbooks, qualification loop behavior, actions, retries, and storage boundaries;
 - frontend tests cover cookie-auth API calls, inbox filtering, and view state;
 - bridge tests cover normalization, forwarding headers, retry behavior, sends, and pairing state;
 - prompt contract tests check that required instructions and output fields remain present.

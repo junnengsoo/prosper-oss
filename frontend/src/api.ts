@@ -19,20 +19,9 @@ export type Contact = {
   last_message_at: string | null;
 };
 
-export type Workspace = {
-  id: string;
-  slug: string;
-  name: string;
-  status: string;
-  role: string | null;
-};
-
 export type Me = {
   auth_user_id: string;
   email: string | null;
-  workspace: Workspace | null;
-  workspaces: Workspace[];
-  whatsapp_account_id: string | null;
 };
 
 export type AuthSession = {
@@ -46,9 +35,7 @@ export type Conversation = {
   source: string;
   status: string;
   current_stage: string | null;
-  host_property_id: string | null;
   matched_property_id: string | null;
-  current_suggested_property_id: string | null;
   latest_message_text: string | null;
   latest_message_timestamp_ms: number | null;
   latest_message_direction: string | null;
@@ -111,20 +98,7 @@ export type PropertyDeleteSummary = {
     properties: number;
     media: number;
     playbooks: number;
-    swing_candidates: number;
   };
-};
-
-export type SwingCandidate = {
-  id: number;
-  source_property_id: string;
-  candidate_property_id: string;
-  sort_order: number;
-  enabled: boolean;
-  candidate_property_name?: string | null;
-  candidate_property_status?: string | null;
-  candidate_property_available?: boolean;
-  validity_reason?: string | null;
 };
 
 export type PlaybookBlock = {
@@ -136,18 +110,16 @@ export type PlaybookBlock = {
 
 export type PropertyPlaybook = {
   id: number | null;
-  workspace_id: string;
   property_id: string;
   initial_reply_blocks: PlaybookBlock[];
   qualification_suitable_blocks: PlaybookBlock[];
   qualification_not_suitable_blocks: PlaybookBlock[];
-  swing_suggestion_blocks: PlaybookBlock[];
   enabled: boolean;
   created_at: string | null;
   updated_at: string | null;
 };
 
-export type PropertyPlaybookInput = Omit<PropertyPlaybook, "id" | "workspace_id" | "property_id" | "created_at" | "updated_at">;
+export type PropertyPlaybookInput = Omit<PropertyPlaybook, "id" | "property_id" | "created_at" | "updated_at">;
 
 export type StageRun = {
   id: number;
@@ -193,7 +165,6 @@ export type RuntimeStatus = {
     playbooks?: { total: number; enabled: number };
     properties?: { total: number; available: number; unavailable: number; unknown: number };
     media?: { total: number; enabled: number };
-    swing_candidates?: { total: number; enabled: number };
     contacts?: { total: number; active: number; paused: number; ignored: number };
     conversations?: { total: number; active: number; closed: number; handover: number; paused: number };
   };
@@ -220,7 +191,6 @@ export type RuntimeStatus = {
       qr_expired?: boolean;
       qr_generation?: number;
     };
-    account_id?: string;
     backend_base_url?: string;
     burst_wait_ms?: number;
     max_backfill_ms?: number;
@@ -264,7 +234,6 @@ export type ConfigExport = {
   config: Record<string, string>;
   properties: PropertyRecord[];
   property_media: PropertyMedia[];
-  swing_candidates: SwingCandidate[];
   playbooks: PropertyPlaybook[];
 };
 
@@ -356,11 +325,6 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(playbook),
     }),
-  swingCandidates: () => request<SwingCandidate[]>("/api/swing-candidates"),
-  upsertSwingCandidate: (candidate: Omit<SwingCandidate, "id">) =>
-    request<SwingCandidate>("/api/swing-candidates", { method: "POST", body: JSON.stringify(candidate) }),
-  deleteSwingCandidate: (candidateId: number) =>
-    request<SwingCandidate>(`/api/swing-candidates/${candidateId}`, { method: "DELETE" }),
   stageRuns: () => request<StageRun[]>("/api/stage-runs"),
   pipelineInspection: (conversationId: number) => request<PipelineInspection>(`/api/conversations/${conversationId}/inspection`),
   config: () => request<{ values: Record<string, string> }>("/api/config"),
@@ -417,13 +381,9 @@ export const api = {
     request<{ conversation_id: number; result: Record<string, unknown> }>(`/api/conversations/${conversationId}/run-qualification`, {
       method: "POST",
     }),
-  runSwinging: (conversationId: number) =>
-    request<{ conversation_id: number; result: Record<string, unknown> }>(`/api/conversations/${conversationId}/run-swinging`, {
-      method: "POST",
-    }),
   closeConversation: (conversationId: number) =>
     request<Conversation>(`/api/conversations/${conversationId}/close`, { method: "POST" }),
-  updateConversationStage: (conversationId: number, stage: "unit_matching" | "qualification" | "swinging" | "end", resume_contact = true) =>
+  updateConversationStage: (conversationId: number, stage: "unit_matching" | "qualification" | "end", resume_contact = true) =>
     request<Conversation>(`/api/conversations/${conversationId}/stage`, {
       method: "PATCH",
       body: JSON.stringify({ stage, resume_contact }),

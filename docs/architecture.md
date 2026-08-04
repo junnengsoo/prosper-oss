@@ -4,8 +4,8 @@ Prosper is organized around a shared backend workflow with separate channel and 
 
 ## Components
 
-- `backend/app/pipeline.py` coordinates triage, property matching, qualification, and swinging stages.
-- `backend/app/models.py` stores workspaces, contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state.
+- `backend/app/pipeline.py` coordinates triage, property matching, and qualification stages.
+- `backend/app/models.py` stores contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state in one application scope.
 - `backend/app/schemas.py` defines the validated request and stage-result contracts.
 - `backend/app/actions.py` turns validated stage results into deterministic outbound actions.
 - `backend/app/services.py` owns message ingestion, deduplication, state checks, and bridge retries.
@@ -25,4 +25,4 @@ Prosper is organized around a shared backend workflow with separate channel and 
 
 Dashboard requests authenticate through `/api/auth/login`, `/api/auth/session`, and `/api/auth/logout`. The cookie is only for the browser dashboard. It is not required for bridge callbacks, which use their own machine-to-machine headers.
 
-The model proposes structured facts and decisions. It does not directly send messages or mutate arbitrary application state.
+The model proposes structured facts and decisions. Qualification may generate the next tenant-facing question, but the bounded loop validates and records it before the action layer sends it.

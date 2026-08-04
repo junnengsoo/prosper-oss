@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from dataclasses import replace
 from datetime import datetime
 from hmac import compare_digest
@@ -22,12 +21,11 @@ from .auth import (
     create_session_token,
     current_user_from_request,
     resolve_dashboard_context,
-    resolve_workspace_context,
     verify_access_password,
 )
 from .config import get_settings
 from .db import SessionLocal, get_session, init_db
-from .models import Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun, SwingCandidate, WhatsappAccount, Workspace, WorkspaceMember
+from .models import Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from .schemas import (
     AppConfigOut,
     AppConfigUpdate,
@@ -57,10 +55,6 @@ from .schemas import (
     PropertyOut,
     StartNewEnquiryRequest,
     StageRunOut,
-    SwingCandidateIn,
-    SwingCandidateOut,
-    WhatsappAccountOut,
-    WorkspaceOut,
 )
 from .actions import execute_outbound_action_plan, plan_outbound_actions
 from .llm import flush_langfuse
@@ -68,7 +62,6 @@ from .pipeline import (
     route_stored_conversation_after_inbound,
     run_initial_enquiry_pipeline,
     run_qualification,
-    run_swinging,
     run_triage_text,
     run_unit_matching,
     run_unit_matching_then_maybe_qualification,
@@ -95,7 +88,6 @@ from .services import (
     delete_properties,
     delete_property,
     delete_property_media,
-    delete_swing_candidate,
     fetch_bridge_pairing_qr,
     fetch_bridge_status,
     get_all_config,
@@ -115,10 +107,7 @@ from .services import (
     update_config,
     upsert_property,
     upsert_property_media,
-    upsert_swing_candidate,
 )
-from .swing import swing_candidate_validity
-from .tenant import DEFAULT_WHATSAPP_ACCOUNT_ID, WorkspaceScope, account_conditions, current_workspace_scope, reset_workspace_scope, set_current_workspace_scope, workspace_conditions
 
 
 logger = logging.getLogger(__name__)
@@ -138,77 +127,27 @@ app.add_middleware(
 )
 
 
-def normalize_whatsapp_account_id(value: str | None) -> str:
-    return re.sub(r"[^a-z0-9_-]+", "_", (value or "").strip().lower()).strip("_")
-
-
 def verify_bridge_headers(
-    x_whatsapp_account_id: str | None = Header(default=None),
     x_whatsapp_bridge_token: str | None = Header(default=None),
-) -> str:
+) -> None:
     settings = get_settings()
     expected_token = settings.whatsapp_pa_bridge_token.strip()
-    provided_account_id = normalize_whatsapp_account_id(x_whatsapp_account_id)
     if settings.auth_required and not expected_token:
         raise HTTPException(status_code=500, detail="WHATSAPP_PA_BRIDGE_TOKEN is required when AUTH_REQUIRED=true")
     if expected_token and (not x_whatsapp_bridge_token or not compare_digest(x_whatsapp_bridge_token, expected_token)):
         raise HTTPException(status_code=401, detail="Invalid bridge token")
 
-    expected_account_id = normalize_whatsapp_account_id(settings.whatsapp_account_id)
-    if expected_account_id and provided_account_id and provided_account_id != expected_account_id:
-        raise HTTPException(status_code=403, detail="Invalid WhatsApp account")
-    return provided_account_id or expected_account_id
-
-
 async def dashboard_context_dependency(
     request: Request,
-    session: Session = Depends(get_session),
 ):
-    context = resolve_dashboard_context(session, request)
-    token = set_current_workspace_scope(route_scope(context))
-    try:
-        yield context
-    finally:
-        reset_workspace_scope(token)
+    yield resolve_dashboard_context(request)
 
 
 async def bridge_context_dependency(
-    session: Session = Depends(get_session),
-    x_whatsapp_account_id: str | None = Header(default=None),
     x_whatsapp_bridge_token: str | None = Header(default=None),
 ):
-    provided_account = verify_bridge_headers(x_whatsapp_account_id, x_whatsapp_bridge_token)
-    account = None
-    if provided_account:
-        account = session.get(WhatsappAccount, provided_account)
-        if account and account.status != "active":
-            account = None
-        if not account:
-            key_matches = list(
-                session.scalars(
-                    select(WhatsappAccount)
-                    .where(WhatsappAccount.status == "active", WhatsappAccount.account_key == provided_account)
-                    .order_by(WhatsappAccount.id)
-                ).all()
-            )
-            if len(key_matches) == 1:
-                account = key_matches[0]
-            elif len(key_matches) > 1:
-                raise HTTPException(status_code=403, detail="Ambiguous WhatsApp account")
-        if not account and get_settings().whatsapp_pa_bridge_token.strip():
-            raise HTTPException(status_code=403, detail="Unknown WhatsApp account")
-    if not account:
-        account = session.get(WhatsappAccount, DEFAULT_WHATSAPP_ACCOUNT_ID)
-    scope = (
-        WorkspaceScope(account.workspace_id, account.id)
-        if account
-        else WorkspaceScope()
-    )
-    token = set_current_workspace_scope(scope)
-    try:
-        yield scope
-    finally:
-        reset_workspace_scope(token)
+    verify_bridge_headers(x_whatsapp_bridge_token)
+    yield None
 
 
 def dashboard_user_dependency(request: Request) -> CurrentUser:
@@ -230,13 +169,8 @@ def route_context(context: RequestContext | object = None) -> RequestContext:
             claims={"sub": "dev-user", "email": "dev@local.test"},
             is_dev_fallback=True,
         ),
-        scope=current_workspace_scope(),
         role="owner",
     )
-
-
-def route_scope(context: RequestContext | object = None) -> WorkspaceScope:
-    return route_context(context).scope
 
 
 def triage_is_initial_enquiry(triage: dict[str, Any] | None) -> bool:
@@ -398,97 +332,11 @@ def demo_unpause_contact(
     return RedirectResponse(url="/", status_code=303)
 
 
-def workspace_out_with_role(workspace: Workspace, role: str | None = None) -> WorkspaceOut:
-    return WorkspaceOut(
-        id=workspace.id,
-        slug=workspace.slug,
-        name=workspace.name,
-        status=workspace.status,
-        role=role,
-    )
-
-
 @app.get("/api/me", response_model=MeOut)
 def get_me(
-    session: Session = Depends(get_session),
     user: CurrentUser = DashboardUser,
-    x_workspace_id: str | None = Header(default=None),
 ) -> MeOut:
-    memberships = list(
-        session.scalars(
-            select(WorkspaceMember)
-            .where(WorkspaceMember.auth_user_id == user.auth_user_id, WorkspaceMember.status == "active")
-            .order_by(WorkspaceMember.id)
-        ).all()
-    )
-    context: RequestContext | None = None
-    if user.is_dev_fallback and not memberships:
-        context = resolve_workspace_context(session, user, x_workspace_id)
-        workspace = session.get(Workspace, route_scope(context).workspace_id)
-        workspaces = [workspace_out_with_role(workspace, route_context(context).role)] if workspace else []
-    else:
-        workspaces = []
-        for membership in memberships:
-            workspace = session.get(Workspace, membership.workspace_id)
-            if workspace:
-                workspaces.append(workspace_out_with_role(workspace, membership.role))
-
-    active_workspace: WorkspaceOut | None = None
-    if x_workspace_id or len(workspaces) <= 1:
-        context = resolve_workspace_context(session, user, x_workspace_id)
-        active_workspace = next((workspace for workspace in workspaces if workspace.id == route_scope(context).workspace_id), None)
-        if not active_workspace:
-            workspace = session.get(Workspace, route_scope(context).workspace_id)
-            if not workspace:
-                raise HTTPException(status_code=403, detail="Active workspace not found")
-            active_workspace = workspace_out_with_role(workspace, route_context(context).role)
-            workspaces.append(active_workspace)
-
-    return MeOut(
-        auth_user_id=user.auth_user_id,
-        email=user.email,
-        workspace=active_workspace,
-        workspaces=workspaces,
-        whatsapp_account_id=route_scope(context).whatsapp_account_id if context else None,
-    )
-
-
-@app.get("/api/workspaces", response_model=list[WorkspaceOut])
-def list_workspaces(
-    session: Session = Depends(get_session),
-    user: CurrentUser = DashboardUser,
-) -> list[WorkspaceOut]:
-    if user.is_dev_fallback:
-        context = resolve_workspace_context(session, user)
-        workspace = session.get(Workspace, route_scope(context).workspace_id)
-        return [workspace_out_with_role(workspace, route_context(context).role)] if workspace else []
-    memberships = list(
-        session.scalars(
-            select(WorkspaceMember)
-            .where(WorkspaceMember.auth_user_id == user.auth_user_id, WorkspaceMember.status == "active")
-            .order_by(WorkspaceMember.id)
-        ).all()
-    )
-    rows: list[WorkspaceOut] = []
-    for membership in memberships:
-        workspace = session.get(Workspace, membership.workspace_id)
-        if workspace:
-            rows.append(workspace_out_with_role(workspace, membership.role))
-    return rows
-
-
-@app.get("/api/whatsapp-accounts", response_model=list[WhatsappAccountOut])
-def list_whatsapp_accounts(
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> list[WhatsappAccount]:
-    return list(
-        session.scalars(
-            select(WhatsappAccount)
-            .where(WhatsappAccount.workspace_id == route_scope(context).workspace_id)
-            .order_by(WhatsappAccount.created_at.desc(), WhatsappAccount.id)
-        ).all()
-    )
+    return MeOut(auth_user_id=user.auth_user_id, email=user.email)
 
 
 @app.get("/api/config", response_model=AppConfigOut)
@@ -516,19 +364,11 @@ def export_config(session: Session = Depends(get_session), context: RequestConte
         exported_at=datetime.now(),
         app="whatsapp-pa",
         config=get_all_config(session),
-        properties=list(session.scalars(select(Property).where(*workspace_conditions(Property, route_scope(context).workspace_id)).order_by(Property.property_id)).all()),
+        properties=list(session.scalars(select(Property).order_by(Property.property_id)).all()),
         property_media=list(
             session.scalars(
                 select(PropertyMedia)
-                .where(*workspace_conditions(PropertyMedia, route_scope(context).workspace_id))
                 .order_by(PropertyMedia.property_id, PropertyMedia.sort_order, PropertyMedia.id)
-            ).all()
-        ),
-        swing_candidates=list(
-            session.scalars(
-                select(SwingCandidate)
-                .where(*workspace_conditions(SwingCandidate, route_scope(context).workspace_id))
-                .order_by(SwingCandidate.source_property_id, SwingCandidate.sort_order)
             ).all()
         ),
         playbooks=list_property_playbooks(session),
@@ -563,35 +403,30 @@ def whatsapp_connection_state(bridge: dict[str, object]) -> str:
     return "disconnected"
 
 
-def bridge_base_url_for_route(session: Session, context: RequestContext) -> str | None:
-    scope = route_scope(context)
-    account = session.get(WhatsappAccount, scope.whatsapp_account_id)
-    return account.bridge_base_url if account else None
+def bridge_base_url_for_route() -> str | None:
+    return get_settings().bridge_base_url
 
 
 @app.get("/api/runtime/status")
 async def runtime_status(
     session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
+    _context: RequestContext = DashboardContext,
 ) -> dict[str, object]:
-    scope = route_scope(context)
-    account = session.get(WhatsappAccount, scope.whatsapp_account_id)
     return {
         "app": "whatsapp-pa",
         "config": get_all_config(session),
         "summary": runtime_summary(session),
         "warnings": runtime_warnings(session),
         "llm": llm_status(),
-        "bridge": await fetch_bridge_status(account.bridge_base_url if account else None),
+        "bridge": await fetch_bridge_status(get_settings().bridge_base_url),
     }
 
 
 @app.get("/api/whatsapp/connection")
 async def whatsapp_connection(
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
+    _context: RequestContext = DashboardContext,
 ) -> dict[str, object]:
-    bridge = await fetch_bridge_status(bridge_base_url_for_route(session, route_context(context)))
+    bridge = await fetch_bridge_status(get_settings().bridge_base_url)
     return {
         "state": whatsapp_connection_state(bridge),
         "bridge": bridge,
@@ -603,7 +438,7 @@ async def whatsapp_pairing_qr(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> dict[str, object]:
-    qr = await fetch_bridge_pairing_qr(bridge_base_url_for_route(session, route_context(context)))
+    qr = await fetch_bridge_pairing_qr(bridge_base_url_for_route())
     state = "qr_available" if qr.get("ok") is True else str(qr.get("status") or "qr_unavailable")
     return {
         "state": state,
@@ -617,7 +452,7 @@ async def whatsapp_reconnect(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> dict[str, object]:
-    bridge_base_url = bridge_base_url_for_route(session, route_context(context))
+    bridge_base_url = bridge_base_url_for_route()
     bridge = await fetch_bridge_status(bridge_base_url)
     clear_auth_requested = clear_auth is True
     should_clear_auth = clear_auth_requested or bridge.get("last_disconnect_requires_reauth") is True
@@ -633,7 +468,7 @@ async def whatsapp_reconnect(
 def list_properties(session: Session = Depends(get_session), context: RequestContext = DashboardContext) -> list[Property]:
     return list(
         session.scalars(
-            select(Property).where(*workspace_conditions(Property, route_scope(context).workspace_id)).order_by(Property.property_id)
+            select(Property).order_by(Property.property_id)
         ).all()
     )
 
@@ -692,19 +527,17 @@ def get_property_playbook_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PropertyPlaybook | dict[str, Any]:
-    property_ = session.scalar(select(Property).where(*workspace_conditions(Property, route_scope(context).workspace_id), Property.property_id == property_id))
+    property_ = session.scalar(select(Property).where(Property.property_id == property_id))
     if not property_:
         raise HTTPException(status_code=404, detail="Property not found")
     playbook = get_property_playbook(session, property_id)
     if not playbook:
         return {
             "id": None,
-            "workspace_id": route_scope(context).workspace_id,
             "property_id": property_id,
             "initial_reply_blocks": [],
             "qualification_suitable_blocks": [],
             "qualification_not_suitable_blocks": [],
-            "swing_suggestion_blocks": [],
             "enabled": False,
             "created_at": None,
             "updated_at": None,
@@ -735,7 +568,7 @@ def list_property_media_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> list[PropertyMedia]:
-    property_ = session.scalar(select(Property).where(*workspace_conditions(Property, route_scope(context).workspace_id), Property.property_id == property_id))
+    property_ = session.scalar(select(Property).where(Property.property_id == property_id))
     if not property_:
         raise HTTPException(status_code=404, detail="Property not found")
     return list_property_media(session, property_id, include_disabled=include_disabled)
@@ -768,7 +601,7 @@ def upload_property_media_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PropertyMedia:
-    property_ = session.scalar(select(Property).where(*workspace_conditions(Property, route_scope(context).workspace_id), Property.property_id == property_id))
+    property_ = session.scalar(select(Property).where(Property.property_id == property_id))
     if not property_:
         raise HTTPException(status_code=404, detail="Property not found")
 
@@ -843,7 +676,7 @@ def delete_property_media_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PropertyMedia:
-    media = session.scalar(select(PropertyMedia).where(*workspace_conditions(PropertyMedia, route_scope(context).workspace_id), PropertyMedia.id == media_id))
+    media = session.scalar(select(PropertyMedia).where(PropertyMedia.id == media_id))
     if not media:
         raise HTTPException(status_code=404, detail="Property media not found")
 
@@ -870,72 +703,11 @@ def delete_property_media_route(
     return media
 
 
-@app.get("/api/swing-candidates", response_model=list[SwingCandidateOut])
-def list_swing_candidates(session: Session = Depends(get_session), context: RequestContext = DashboardContext) -> list[dict[str, Any]]:
-    scope = route_scope(context)
-    candidates = list(
-        session.scalars(
-            select(SwingCandidate)
-            .where(*workspace_conditions(SwingCandidate, scope.workspace_id))
-            .order_by(SwingCandidate.source_property_id, SwingCandidate.sort_order)
-        ).all()
-    )
-    return [_swing_candidate_payload(session, candidate, scope.workspace_id) for candidate in candidates]
-
-
-def _swing_candidate_payload(session: Session, candidate: SwingCandidate, workspace_id: str) -> dict[str, Any]:
-    property_ = session.scalar(
-        select(Property).where(*workspace_conditions(Property, workspace_id), Property.property_id == candidate.candidate_property_id)
-    )
-    return {
-        "id": candidate.id,
-        "source_property_id": candidate.source_property_id,
-        "candidate_property_id": candidate.candidate_property_id,
-        "sort_order": candidate.sort_order,
-        "enabled": candidate.enabled,
-        "candidate_property_name": property_.property_name if property_ else None,
-        **swing_candidate_validity(candidate.candidate_property_id, property_),
-    }
-
-
-@app.post("/api/swing-candidates", response_model=SwingCandidateOut)
-def create_or_update_swing_candidate(
-    payload: SwingCandidateIn,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> dict[str, Any]:
-    scope = route_scope(context)
-    source = session.scalar(select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == payload.source_property_id))
-    candidate_property = session.scalar(select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == payload.candidate_property_id))
-    if not source or not candidate_property:
-        raise HTTPException(status_code=404, detail="Source and candidate properties must both exist")
-    candidate = upsert_swing_candidate(session, payload)
-    session.commit()
-    session.refresh(candidate)
-    return _swing_candidate_payload(session, candidate, scope.workspace_id)
-
-
-@app.delete("/api/swing-candidates/{candidate_id}", response_model=SwingCandidateOut)
-def delete_swing_candidate_route(
-    candidate_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> dict[str, Any]:
-    scope = route_scope(context)
-    candidate = session.scalar(select(SwingCandidate).where(*workspace_conditions(SwingCandidate, scope.workspace_id), SwingCandidate.id == candidate_id))
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Swing candidate not found")
-    payload = _swing_candidate_payload(session, candidate, scope.workspace_id)
-    candidate = delete_swing_candidate(session, candidate_id)
-    session.commit()
-    return payload
-
-
 @app.get("/api/contacts", response_model=list[ContactOut])
 def list_contacts(session: Session = Depends(get_session), context: RequestContext = DashboardContext) -> list[Contact]:
     return list(
         session.scalars(
-            select(Contact).where(*workspace_conditions(Contact, route_scope(context).workspace_id)).order_by(Contact.updated_at.desc())
+            select(Contact).order_by(Contact.updated_at.desc())
         ).all()
     )
 
@@ -947,7 +719,7 @@ def update_contact_status(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> Contact:
-    contact = session.scalar(select(Contact).where(*workspace_conditions(Contact, route_scope(context).workspace_id), Contact.id == contact_id))
+    contact = session.scalar(select(Contact).where(Contact.id == contact_id))
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     if payload.status == "paused":
@@ -968,7 +740,7 @@ def cancel_contact_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> Contact:
-    contact = session.scalar(select(Contact).where(*workspace_conditions(Contact, route_scope(context).workspace_id), Contact.id == contact_id))
+    contact = session.scalar(select(Contact).where(Contact.id == contact_id))
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     cancel_contact(session, contact)
@@ -983,7 +755,7 @@ def list_conversations(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> list[ConversationOut]:
-    query = select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id)).order_by(Conversation.updated_at.desc())
+    query = select(Conversation).order_by(Conversation.updated_at.desc())
     if not include_closed:
         query = query.where(Conversation.status != "closed")
     conversations = session.scalars(query).all()
@@ -1001,9 +773,7 @@ def list_conversations(
                 source=conversation.source,
                 status=conversation.status,
                 current_stage=conversation.current_stage,
-                host_property_id=conversation.host_property_id,
                 matched_property_id=conversation.matched_property_id,
-                current_suggested_property_id=conversation.current_suggested_property_id,
                 latest_message_text=latest_message.text if latest_message else None,
                 latest_message_timestamp_ms=latest_message.timestamp_ms if latest_message else None,
                 latest_message_direction=latest_message.direction if latest_message else None,
@@ -1018,13 +788,13 @@ def list_messages(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> list[Message]:
-    conversation = session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id))
+    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return list(
         session.scalars(
             select(Message)
-            .where(*workspace_conditions(Message, route_scope(context).workspace_id), Message.conversation_id == conversation_id)
+            .where(Message.conversation_id == conversation_id)
             .order_by(Message.timestamp_ms)
         ).all()
     )
@@ -1036,7 +806,7 @@ def close_conversation_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> Conversation:
-    conversation = session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id))
+    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     close_conversation(session, conversation)
@@ -1052,7 +822,7 @@ def start_new_enquiry_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> Conversation:
-    conversation = session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id))
+    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
@@ -1086,7 +856,7 @@ def update_conversation_stage_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> Conversation:
-    conversation = session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id))
+    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
@@ -1104,7 +874,7 @@ def fake_inbound(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> Message:
-    existing_contact = session.scalar(select(Contact).where(*workspace_conditions(Contact, route_scope(context).workspace_id), Contact.chat_jid == payload.chat_jid))
+    existing_contact = session.scalar(select(Contact).where(Contact.chat_jid == payload.chat_jid))
     existing_conversation = (
         session.scalar(select(Conversation).where(Conversation.contact_id == existing_contact.id, Conversation.status == "active"))
         if existing_contact
@@ -1130,7 +900,7 @@ async def fake_inbound_and_run(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PipelineRunResponse:
-    existing_contact = session.scalar(select(Contact).where(*workspace_conditions(Contact, route_scope(context).workspace_id), Contact.chat_jid == payload.chat_jid))
+    existing_contact = session.scalar(select(Contact).where(Contact.chat_jid == payload.chat_jid))
     existing_conversation = (
         session.scalar(select(Conversation).where(Conversation.contact_id == existing_contact.id, Conversation.status == "active"))
         if existing_contact
@@ -1188,8 +958,7 @@ def reset_fake_chat_route(
 
 
 def active_whatsapp_conversation_for_payload(session: Session, payload: BridgeInboundMessage) -> tuple[Contact | None, Conversation | None]:
-    scope = current_workspace_scope()
-    contact = session.scalar(select(Contact).where(*account_conditions(Contact, scope), Contact.chat_jid == payload.chat_jid))
+    contact = session.scalar(select(Contact).where(Contact.chat_jid == payload.chat_jid))
     if not contact:
         return None, None
     conversation = session.scalar(
@@ -1211,9 +980,9 @@ def should_pretriage_before_storing(session: Session, payload: BridgeInboundMess
 def bridge_chat_state(
     chat_jid: str = Query(min_length=1),
     session: Session = Depends(get_session),
-    _bridge_scope: WorkspaceScope = BridgeContext,
+    _bridge_scope: object = BridgeContext,
 ) -> dict[str, Any]:
-    contact = session.scalar(select(Contact).where(*account_conditions(Contact, route_scope(_bridge_scope)), Contact.chat_jid == chat_jid))
+    contact = session.scalar(select(Contact).where(Contact.chat_jid == chat_jid))
     if not contact:
         return {
             "chat_jid": chat_jid,
@@ -1252,7 +1021,7 @@ def render_bridge_batch_thread(messages: list[BridgeInboundMessage]) -> str:
 async def bridge_inbound(
     payload: BridgeInboundMessage,
     session: Session = Depends(get_session),
-    _bridge_scope: WorkspaceScope = BridgeContext,
+    _bridge_scope: object = BridgeContext,
 ) -> BridgeAck:
     if should_pretriage_before_storing(session, payload):
         triage = await run_triage_text(session, payload.text, conversation_id=None, persist_input_snapshot=False)
@@ -1287,7 +1056,7 @@ async def bridge_inbound(
 async def bridge_inbound_batch(
     payload: BridgeInboundBatch,
     session: Session = Depends(get_session),
-    _bridge_scope: WorkspaceScope = BridgeContext,
+    _bridge_scope: object = BridgeContext,
 ) -> BridgeAck:
     if not payload.messages:
         return BridgeAck(accepted=True, reason="empty_batch", data={"count": 0})
@@ -1371,7 +1140,7 @@ async def run_initial_pipeline_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id)):
+    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
         result = await run_initial_enquiry_pipeline(session, conversation_id)
@@ -1388,7 +1157,7 @@ async def run_next_pipeline_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id)):
+    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
         result = await route_stored_conversation_after_inbound(session, conversation_id)
@@ -1405,7 +1174,7 @@ async def run_unit_matching_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id)):
+    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
         result = await run_unit_matching(session, conversation_id)
@@ -1422,27 +1191,10 @@ async def run_qualification_route(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id)):
+    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
         result = await run_qualification(session, conversation_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    result = await attach_outbound_action_result(session, result, conversation_id)
-    session.commit()
-    return PipelineRunResponse(conversation_id=conversation_id, result=result)
-
-
-@app.post("/api/conversations/{conversation_id}/run-swinging", response_model=PipelineRunResponse)
-async def run_swinging_route(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id)):
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        result = await run_swinging(session, conversation_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     result = await attach_outbound_action_result(session, result, conversation_id)
@@ -1454,7 +1206,7 @@ async def run_swinging_route(
 def list_stage_runs(session: Session = Depends(get_session), context: RequestContext = DashboardContext) -> list[StageRun]:
     return list(
         session.scalars(
-            select(StageRun).where(*workspace_conditions(StageRun, route_scope(context).workspace_id)).order_by(StageRun.created_at.desc(), StageRun.id.desc())
+            select(StageRun).order_by(StageRun.created_at.desc(), StageRun.id.desc())
         ).all()
     )
 
@@ -1465,7 +1217,7 @@ def inspect_conversation_pipeline(
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
 ) -> dict[str, Any]:
-    conversation = session.scalar(select(Conversation).where(*workspace_conditions(Conversation, route_scope(context).workspace_id), Conversation.id == conversation_id))
+    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return jsonable_encoder(build_pipeline_inspection(session, conversation))

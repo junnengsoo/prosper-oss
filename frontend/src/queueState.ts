@@ -40,7 +40,6 @@ export function matchesQueueSearch(row: InboxRow, queryText: string, properties:
     row.conversation.status,
     row.conversation.source,
     row.conversation.matched_property_id,
-    row.conversation.current_suggested_property_id,
     row.conversation.latest_message_direction,
     row.conversation.latest_message_text,
     property?.property_name,

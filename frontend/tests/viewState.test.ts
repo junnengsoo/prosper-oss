@@ -29,7 +29,6 @@ assert(isAppView("simulator"), "simulator should be a valid app view");
 assert(!isAppView("fake_chat"), "old fake_chat view should not be a current app view");
 assert(!isAppView("prompts"), "old prompts view should not be a current app view");
 assert(!isAppView("playbook"), "playbook should be hidden from the MVP nav");
-assert(!isAppView("swing"), "swing should now live inside properties instead of top-level nav");
 assert(!isAppView("settings"), "unknown values should not be valid app views");
 assert(!isAppView(null), "null should not be a valid app view");
 
@@ -37,14 +36,12 @@ assert(normalizeHashView("#properties") === "properties", "hash with # should no
 assert(normalizeHashView("#fake_chat") === "simulator", "old fake chat hash should redirect to simulator");
 assert(normalizeHashView("prompts") === "properties", "old prompts hash should redirect to properties");
 assert(normalizeHashView("playbook") === "properties", "old playbook hash should redirect to properties");
-assert(normalizeHashView("#swing") === "properties", "old swing hash should redirect to properties");
 assert(normalizeHashView("#unknown") === null, "unknown hash should normalize to null");
 assert(normalizeHashView("") === null, "empty hash should normalize to null");
 
 assert(appViewHash("inbox") === "inbox", "normal views should publish their own hash");
 
 assert(readStoredAppView(makeStorage("playbook")) === null, "hidden stored playbook view should be ignored");
-assert(readStoredAppView(makeStorage("swing")) === null, "old stored view should be ignored");
 assert(readStoredAppView(makeStorage("bad-view")) === null, "invalid stored view should return null");
 assert(readStoredAppView(makeStorage(null)) === null, "missing stored view should return null");
 

@@ -28,8 +28,6 @@ from .services import (
     split_outbound_parts,
 )
 from .app_config import get_config_value
-from .swing import stale_swing_property_diagnostic, swing_property_is_available
-from .tenant import WorkspaceScope, workspace_conditions
 
 
 @dataclass(frozen=True)
@@ -83,24 +81,13 @@ def _unit_matching_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _qualification_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
-    """Extract qualification output from direct, nested, or qualification+swinging results."""
+    """Extract qualification output from direct or nested results."""
     if "qualification_status" in pipeline_result:
         return pipeline_result
     qualification = _as_dict(pipeline_result.get("qualification"))
     if "qualification_status" in qualification:
         return qualification
     return _as_dict(qualification.get("qualification"))
-
-
-def _swinging_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
-    """Extract swinging output from direct results or nested qualification results."""
-    if "swing_status" in pipeline_result:
-        return pipeline_result
-    swinging = _as_dict(pipeline_result.get("swinging"))
-    if swinging:
-        return swinging
-    qualification = _as_dict(pipeline_result.get("qualification"))
-    return _as_dict(qualification.get("swinging"))
 
 
 def _profile_present(unit_matching: dict[str, Any]) -> bool:
@@ -118,31 +105,17 @@ def _matched_property_id(unit_matching: dict[str, Any], conversation: Conversati
     return conversation.matched_property_id
 
 
-def _suggested_swing_property_id(swinging: dict[str, Any]) -> str | None:
-    """Resolve the property ID selected or suggested by the swinging stage."""
-    current = swinging.get("current_suggested_property") or {}
-    if isinstance(current, dict):
-        property_id = current.get("property_id")
-        if isinstance(property_id, str) and property_id:
-            return property_id
-    selected = swinging.get("selected_property_id")
-    return selected if isinstance(selected, str) and selected else None
-
-
 def _matched_unit_unavailable(unit_matching: dict[str, Any], qualification: dict[str, Any]) -> bool:
     """Detect when the current unit-matching result found an unavailable unit."""
     return unit_matching.get("matched_property_status") == "unavailable" and not qualification
 
 
 def _property_for_conversation(session: Session, conversation: Conversation, property_id: str | None = None) -> Property | None:
-    """Resolve a property inside the conversation workspace."""
+    """Resolve a property for a conversation."""
     resolved_id = property_id or conversation.matched_property_id
     if not resolved_id:
         return None
-    scope = WorkspaceScope(conversation.workspace_id, conversation.whatsapp_account_id)
-    return session.scalar(
-        select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == resolved_id)
-    )
+    return session.scalar(select(Property).where(Property.property_id == resolved_id))
 
 
 def _playbook_action(
@@ -153,7 +126,6 @@ def _playbook_action(
     field_name: str,
     property_id: str | None,
     reason: str = "",
-    suggested_property_id: str | None = None,
 ) -> OutboundAction | None:
     playbook_property_id = property_id
     playbook = get_property_playbook(session, playbook_property_id) if playbook_property_id else None
@@ -162,62 +134,12 @@ def _playbook_action(
         return OutboundAction(
             action_type="send_playbook",
             stage=stage,
-            property_id=suggested_property_id or property_id,
+            property_id=property_id,
             playbook_property_id=playbook_property_id,
             blocks=blocks,
             reason=reason,
         )
     return None
-
-
-def _stale_swing_action(
-    session: Session,
-    *,
-    configured_swing_property_id: str,
-    property_: Property | None,
-) -> OutboundAction:
-    diagnostic = stale_swing_property_diagnostic(configured_swing_property_id, property_)
-    fallback = get_config_value(session, "stale_swing_property_fallback_reply").strip()
-    if fallback:
-        return OutboundAction(
-            action_type="send_message",
-            stage="swinging",
-            message=fallback,
-            reason=diagnostic["reason"],
-            diagnostic=diagnostic,
-        )
-    return OutboundAction(
-        action_type="needs_review",
-        stage="swinging",
-        reason=diagnostic["reason"],
-        diagnostic=diagnostic,
-    )
-
-
-def _validated_swing_playbook_action(
-    session: Session,
-    conversation: Conversation,
-    *,
-    field_name: str,
-    suggested_property_id: str,
-    reason: str,
-) -> OutboundAction | None:
-    suggested_property = _property_for_conversation(session, conversation, suggested_property_id)
-    if not swing_property_is_available(suggested_property):
-        return _stale_swing_action(
-            session,
-            configured_swing_property_id=suggested_property_id,
-            property_=suggested_property,
-        )
-    return _playbook_action(
-        session,
-        conversation,
-        stage="swinging",
-        field_name=field_name,
-        property_id=conversation.host_property_id or conversation.matched_property_id,
-        suggested_property_id=suggested_property_id,
-        reason=reason,
-    )
 
 
 def _qualification_message_action(
@@ -274,10 +196,9 @@ def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str,
 
     unit_matching = _unit_matching_result(pipeline_result)
     qualification = _qualification_result(pipeline_result)
-    swinging = _swinging_result(pipeline_result)
     actions: list[OutboundAction] = []
 
-    if unit_matching.get("match_status") == "matched" and unit_matching.get("matched_property_status") != "unavailable" and not qualification and not swinging:
+    if unit_matching.get("match_status") == "matched" and not qualification:
         property_id = _matched_property_id(unit_matching, conversation)
         if property_id:
             action = _playbook_action(
@@ -306,22 +227,6 @@ def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str,
                 )
                 if action:
                     actions.append(action)
-        if status == "not_match" and swinging.get("swing_status") == "suggest_alternative":
-            not_match = _qualification_message_action(session, conversation, qualification, allow_not_match_reply=False)
-            if not_match:
-                actions.append(not_match)
-            property_id = _suggested_swing_property_id(swinging)
-            if property_id:
-                action = _validated_swing_playbook_action(
-                    session,
-                    conversation,
-                    field_name="swing_suggestion_blocks",
-                    suggested_property_id=property_id,
-                    reason=str(swinging.get("reason") or ""),
-                )
-                if action:
-                    actions.append(action)
-            return actions
         if status == "not_match":
             action = _qualification_message_action(session, conversation, qualification)
             return [action] if action else []
@@ -330,47 +235,6 @@ def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str,
             actions.append(action)
         return actions
 
-    if swinging:
-        status = swinging.get("swing_status")
-        reason = str(swinging.get("reason") or "")
-        if status == "suggest_alternative":
-            property_id = _suggested_swing_property_id(swinging)
-            if property_id:
-                action = _validated_swing_playbook_action(
-                    session,
-                    conversation,
-                    field_name="swing_suggestion_blocks",
-                    suggested_property_id=property_id,
-                    reason=reason,
-                )
-                if action:
-                    actions.append(action)
-                return actions
-        if status == "stale_swing_property":
-            diagnostic = _as_dict(swinging.get("diagnostic"))
-            configured_id = str(diagnostic.get("configured_swing_property_id") or _suggested_swing_property_id(swinging) or "")
-            if configured_id:
-                property_ = _property_for_conversation(session, conversation, configured_id)
-                return [_stale_swing_action(session, configured_swing_property_id=configured_id, property_=property_)]
-            return []
-        if status == "answer_question":
-            message = str(swinging.get("tenant_reply") or "").strip()
-            if message:
-                return [OutboundAction(action_type="send_message", stage="swinging", message=message, reason=reason)]
-        if status == "proceed_to_qualification":
-            return [
-                OutboundAction(
-                    action_type="send_profile_form",
-                    stage="qualification",
-                    reason=reason or "Swing candidate accepted; profile form required before qualification.",
-                )
-            ]
-        if status == "no_good_candidate":
-            if actions:
-                return actions
-            return []
-        if status == "no_configured_candidate":
-            return []
     return actions
 
 
@@ -400,12 +264,10 @@ def _render_action_parts(
     """Render an action into structured text/delay/gallery parts and fallback media."""
     if action.action_type == "send_playbook" and action.blocks:
         property_ = _property_for_conversation(session, conversation, action.playbook_property_id or action.property_id)
-        suggested_property = _property_for_conversation(session, conversation, action.property_id)
         rendered = render_playbook_blocks(
             session,
             action.blocks,
             property_=property_,
-            suggested_property=suggested_property,
         )
         has_gallery = any(part.type == "gallery" for part in rendered)
         if not has_gallery:
@@ -462,8 +324,6 @@ def _record_outbound_action_audit(session: Session, conversation: Conversation, 
     from .models import StageRun
 
     run = StageRun(
-        workspace_id=conversation.workspace_id,
-        whatsapp_account_id=conversation.whatsapp_account_id,
         conversation_id=conversation.id,
         stage="outbound_actions",
         input_snapshot="deterministic outbound action planner",

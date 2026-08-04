@@ -1,4 +1,4 @@
-import { BACKEND_BASE_URL, WHATSAPP_ACCOUNT_ID, WHATSAPP_BRIDGE_TOKEN } from "./config.js";
+import { BACKEND_BASE_URL, WHATSAPP_BRIDGE_TOKEN } from "./config.js";
 import type { NormalizedMessage } from "./normalize.js";
 
 const RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000];
@@ -13,9 +13,6 @@ function shouldRetry(status: number): boolean {
 
 function bridgeAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (WHATSAPP_ACCOUNT_ID) {
-    headers["x-whatsapp-account-id"] = WHATSAPP_ACCOUNT_ID;
-  }
   if (WHATSAPP_BRIDGE_TOKEN) {
     headers["x-whatsapp-bridge-token"] = WHATSAPP_BRIDGE_TOKEN;
   }

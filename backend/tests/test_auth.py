@@ -14,7 +14,6 @@ import app.auth as auth_module
 from app.db import Base
 from app.main import app, get_session
 from app.seed import seed_all
-from app.tenant import WorkspaceScope, reset_workspace_scope, set_current_workspace_scope
 
 
 @pytest.fixture
@@ -22,13 +21,11 @@ def session():
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    token = set_current_workspace_scope(WorkspaceScope())
     try:
         with SessionLocal() as db:
             seed_all(db)
             yield db
     finally:
-        reset_workspace_scope(token)
         engine.dispose()
 
 
@@ -67,7 +64,7 @@ def test_single_user_cookie_auth_flow(session, monkeypatch):
         me = client.get("/api/me")
         assert me.status_code == 200
         assert me.json()["auth_user_id"] == "prosper-owner"
-        assert me.json()["workspace"]["id"] == "default"
+        assert me.json() == {"auth_user_id": "prosper-owner", "email": None}
 
         logged_out = client.post("/api/auth/logout")
         assert logged_out.status_code == 200

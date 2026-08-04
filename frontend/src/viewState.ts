@@ -7,7 +7,6 @@ export const APP_VIEWS: AppView[] = ["inbox", "properties", "simulator"];
 const HASH_ALIASES: Record<string, AppView> = {
   fake_chat: "simulator",
   prompts: "properties",
-  swing: "properties",
   playbook: "properties",
 };
 

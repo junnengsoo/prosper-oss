@@ -15,18 +15,17 @@ import P from "pino";
 import qrcode from "qrcode-terminal";
 
 import {
-  ACCOUNT_RUNTIME_DIR,
   AUTH_DIR,
   BACKEND_BASE_URL,
   BRIDGE_HOST,
   BRIDGE_PORT,
   WHATSAPP_ACTIVE_BURST_WAIT_MS,
-  WHATSAPP_ACCOUNT_ID,
   WHATSAPP_BRIDGE_TOKEN,
   WHATSAPP_HISTORY_SYNC_ONBOARDING,
   WHATSAPP_MAX_BACKFILL_MS,
   WHATSAPP_PAIRING_PHONE_NUMBER,
   WHATSAPP_TRIAGE_BURST_WAIT_MS,
+  RUNTIME_DIR,
 } from "./config.js";
 import { fetchBridgeChatState, postInboundBatch } from "./backend.js";
 import {
@@ -145,8 +144,7 @@ function bridgeStatus(): Record<string, unknown> {
   return {
     ok: true,
     bridge: "whatsapp-pa-bridge",
-    account_id: WHATSAPP_ACCOUNT_ID || "legacy",
-    runtime_dir: ACCOUNT_RUNTIME_DIR,
+    runtime_dir: RUNTIME_DIR,
     backend_base_url: BACKEND_BASE_URL,
     backend_auth_configured: Boolean(WHATSAPP_BRIDGE_TOKEN),
     connection: connectionStatus,
@@ -931,7 +929,7 @@ async function connectSocket(): Promise<void> {
 async function start(): Promise<void> {
   installProcessHandlers();
   console.log(`[bridge] Backend: ${BACKEND_BASE_URL}`);
-  console.log(`[bridge] Account: ${WHATSAPP_ACCOUNT_ID || "legacy"} runtime=${ACCOUNT_RUNTIME_DIR}`);
+  console.log(`[bridge] Runtime: ${RUNTIME_DIR}`);
   console.log(`[bridge] Inbound triage burst wait: ${WHATSAPP_TRIAGE_BURST_WAIT_MS}ms`);
   console.log(`[bridge] Inbound active burst wait: ${WHATSAPP_ACTIVE_BURST_WAIT_MS}ms`);
   console.log("[bridge] Reconnect mode: guide_fixed");

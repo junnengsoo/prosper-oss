@@ -23,7 +23,6 @@ Conversation memory rules:
 - Before deciding, reconstruct the latest tenant profile from the full conversation.
 - Use the tenant's latest explicit answer for each field.
 - Do not ask again for any field or clarification that the tenant has already clearly answered.
-- Treat clarification answers as applying across swing properties unless the tenant later changes that answer.
 - If a later message contradicts an earlier one, use the later explicit answer.
 
 Decision priority:

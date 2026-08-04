@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .models import Contact, Conversation, Property, PropertyMedia, PropertyPlaybook, StageRun, SwingCandidate
+from .models import Contact, Conversation, Property, PropertyMedia, PropertyPlaybook, StageRun
 
 
 def count_rows(session: Session, model: type, *criteria: object) -> int:
@@ -27,10 +27,6 @@ def runtime_summary(session: Session) -> dict[str, object]:
             "total": count_rows(session, PropertyMedia),
             "enabled": count_rows(session, PropertyMedia, PropertyMedia.enabled.is_(True)),
         },
-        "swing_candidates": {
-            "total": count_rows(session, SwingCandidate),
-            "enabled": count_rows(session, SwingCandidate, SwingCandidate.enabled.is_(True)),
-        },
         "contacts": {
             "total": count_rows(session, Contact),
             "active": count_rows(session, Contact, Contact.status == "active"),
@@ -54,34 +50,4 @@ def runtime_summary(session: Session) -> dict[str, object]:
 
 def runtime_warnings(session: Session) -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
-    enabled_swing_candidates = session.scalars(select(SwingCandidate).where(SwingCandidate.enabled.is_(True))).all()
-    for candidate in enabled_swing_candidates:
-        source = session.scalar(select(Property).where(Property.property_id == candidate.source_property_id))
-        target = session.scalar(select(Property).where(Property.property_id == candidate.candidate_property_id))
-        label = f"{candidate.source_property_id}->{candidate.candidate_property_id}"
-        if not source or not target:
-            warnings.append(
-                {
-                    "code": "swing_candidate_missing_property",
-                    "severity": "warning",
-                    "message": f"Enabled swing candidate references missing property: {label}",
-                }
-            )
-            continue
-        if source.status != "available":
-            warnings.append(
-                {
-                    "code": "swing_candidate_source_unavailable",
-                    "severity": "warning",
-                    "message": f"Enabled swing candidate source is not available in automatic flow: {label} source_status={source.status}",
-                }
-            )
-        if target.status != "available":
-            warnings.append(
-                {
-                    "code": "swing_candidate_target_unavailable",
-                    "severity": "warning",
-                    "message": f"Enabled swing candidate target is not available: {label} target_status={target.status}",
-                }
-            )
     return warnings

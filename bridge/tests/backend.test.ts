@@ -17,11 +17,9 @@ function message(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage 
 }
 
 const originalFetch = globalThis.fetch;
-const originalAccountId = process.env.WHATSAPP_ACCOUNT_ID;
 const originalBridgeToken = process.env.WHATSAPP_PA_BRIDGE_TOKEN;
 const calls: Array<{ url: string; init?: RequestInit }> = [];
 
-process.env.WHATSAPP_ACCOUNT_ID = "Demo Account";
 process.env.WHATSAPP_PA_BRIDGE_TOKEN = "test-secret-token";
 
 globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -48,7 +46,6 @@ try {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "http://127.0.0.1:8000/api/bridge/inbound");
   assert.equal(headersFor(calls[0]).get("content-type"), "application/json");
-  assert.equal(headersFor(calls[0]).get("x-whatsapp-account-id"), "demo_account");
   assert.equal(headersFor(calls[0]).get("x-whatsapp-bridge-token"), "test-secret-token");
   const singleBody = JSON.parse(String(calls[0].init?.body));
   assert.equal(singleBody.from_me, true);
@@ -70,7 +67,6 @@ try {
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "http://127.0.0.1:8000/api/bridge/inbound-batch");
-  assert.equal(headersFor(calls[0]).get("x-whatsapp-account-id"), "demo_account");
   assert.equal(headersFor(calls[0]).get("x-whatsapp-bridge-token"), "test-secret-token");
   const batchBody = JSON.parse(String(calls[0].init?.body));
   assert.deepEqual(
@@ -99,7 +95,6 @@ try {
 
   assert.equal(retryAttempts, 2);
   assert.equal(calls.length, 2);
-  assert.equal(headersFor(calls[1]).get("x-whatsapp-account-id"), "demo_account");
   assert.equal(headersFor(calls[1]).get("x-whatsapp-bridge-token"), "test-secret-token");
   const retryBody = JSON.parse(String(calls[1].init?.body));
   assert.equal(retryBody.messages[0].message_id, "tenant-retry");
@@ -117,16 +112,10 @@ try {
     calls[0].url,
     "http://127.0.0.1:8000/api/bridge/chat-state?chat_jid=6599999999%40s.whatsapp.net",
   );
-  assert.equal(headersFor(calls[0]).get("x-whatsapp-account-id"), "demo_account");
   assert.equal(headersFor(calls[0]).get("x-whatsapp-bridge-token"), "test-secret-token");
   assert.equal(chatState.burst_mode, "active_conversation");
 } finally {
   globalThis.fetch = originalFetch;
-  if (originalAccountId === undefined) {
-    delete process.env.WHATSAPP_ACCOUNT_ID;
-  } else {
-    process.env.WHATSAPP_ACCOUNT_ID = originalAccountId;
-  }
   if (originalBridgeToken === undefined) {
     delete process.env.WHATSAPP_PA_BRIDGE_TOKEN;
   } else {

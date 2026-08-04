@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .models import AppConfig, Property
 from .playbooks import ensure_starter_property_playbook
-from .tenant import apply_workspace_scope, current_workspace_scope, ensure_default_workspace, workspace_conditions
 
 
 SEED_DATA_DIR = Path(__file__).resolve().parent / "seed_data"
@@ -35,7 +34,6 @@ DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS = {
 
 
 def seed_app_config(session: Session) -> None:
-    scope = current_workspace_scope()
     defaults = {
         "pause_ai": "false",
         "send_lock": "false",
@@ -43,10 +41,10 @@ def seed_app_config(session: Session) -> None:
         "profile_form": DEFAULT_PROFILE_FORM,
     }
     for key, value in defaults.items():
-        existing = session.scalar(select(AppConfig).where(*workspace_conditions(AppConfig, scope.workspace_id), AppConfig.key == key))
+        existing = session.scalar(select(AppConfig).where(AppConfig.key == key))
         if existing:
             continue
-        session.add(apply_workspace_scope(AppConfig(key=key, value=value), scope))
+        session.add(AppConfig(key=key, value=value))
 
 
 def extract_property_rows_from_unit_matching_prompt(prompt_text: str) -> list[dict[str, str]]:
@@ -110,15 +108,14 @@ def property_kwargs_from_listing_seed(row: dict) -> dict:
 
 
 def seed_listings_view_properties(session: Session, seed_file: Path = LISTINGS_VIEW_SEED_FILE) -> None:
-    scope = current_workspace_scope()
     for row in load_listings_view_seed_rows(seed_file):
         values = property_kwargs_from_listing_seed(row)
         if not values["property_id"] or not values["property_name"]:
             continue
-        existing = session.scalar(select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == values["property_id"]))
+        existing = session.scalar(select(Property).where(Property.property_id == values["property_id"]))
         if existing:
             continue
-        session.add(apply_workspace_scope(Property(**values), scope))
+        session.add(Property(**values))
 
 
 def seed_properties(session: Session) -> None:
@@ -128,11 +125,10 @@ def seed_properties(session: Session) -> None:
 
 
 def seed_property_playbooks(session: Session, property_ids: set[str] | None = None) -> None:
-    scope = current_workspace_scope()
     target_property_ids = property_ids or DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS
     properties = session.scalars(
         select(Property)
-        .where(*workspace_conditions(Property, scope.workspace_id), Property.property_id.in_(target_property_ids))
+        .where(Property.property_id.in_(target_property_ids))
         .order_by(Property.property_id)
     ).all()
     for property_ in properties:
@@ -140,7 +136,6 @@ def seed_property_playbooks(session: Session, property_ids: set[str] | None = No
 
 
 def seed_all(session: Session) -> None:
-    ensure_default_workspace(session)
     seed_app_config(session)
     seed_properties(session)
     session.commit()

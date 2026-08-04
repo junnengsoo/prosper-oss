@@ -8,12 +8,8 @@ import time
 from typing import Any
 
 from fastapi import HTTPException, Request
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .models import WhatsappAccount, WorkspaceMember
-from .tenant import DEFAULT_WHATSAPP_ACCOUNT_ID, DEFAULT_WORKSPACE_ID, WorkspaceScope
 
 
 SESSION_COOKIE_NAME = "prosper_session"
@@ -31,7 +27,6 @@ class CurrentUser:
 @dataclass(frozen=True)
 class RequestContext:
     user: CurrentUser
-    scope: WorkspaceScope
     role: str = "owner"
 
 
@@ -101,67 +96,5 @@ def current_user_from_request(request: Request) -> CurrentUser:
     return current_user_from_session(request.cookies.get(SESSION_COOKIE_NAME))
 
 
-def resolve_workspace_context(
-    session: Session,
-    user: CurrentUser,
-    requested_workspace_id: str | None = None,
-) -> RequestContext:
-    if (user.is_dev_fallback and not get_settings().auth_required) or user.is_single_user_session:
-        return RequestContext(
-            user=user,
-            scope=WorkspaceScope(DEFAULT_WORKSPACE_ID, DEFAULT_WHATSAPP_ACCOUNT_ID),
-            role="owner",
-        )
-
-    query = select(WorkspaceMember).where(
-        WorkspaceMember.auth_user_id == user.auth_user_id,
-        WorkspaceMember.status == "active",
-    )
-    if requested_workspace_id:
-        query = query.where(WorkspaceMember.workspace_id == requested_workspace_id)
-    memberships = list(session.scalars(query.order_by(WorkspaceMember.id)).all())
-    if not memberships:
-        raise HTTPException(status_code=403, detail="No active workspace membership")
-    if not requested_workspace_id and len(memberships) > 1:
-        raise HTTPException(status_code=403, detail="Multiple active workspaces; x-workspace-id is required")
-
-    membership = memberships[0]
-    whatsapp_accounts = list(
-        session.scalars(
-            select(WhatsappAccount)
-            .where(WhatsappAccount.workspace_id == membership.workspace_id, WhatsappAccount.status == "active")
-            .order_by(WhatsappAccount.id)
-        ).all()
-    )
-    if not whatsapp_accounts:
-        raise HTTPException(status_code=403, detail="Workspace has no active WhatsApp account")
-    if len(whatsapp_accounts) > 1:
-        raise HTTPException(status_code=403, detail="Workspace has multiple active WhatsApp accounts")
-
-    whatsapp_account = whatsapp_accounts[0]
-    return RequestContext(
-        user=user,
-        scope=WorkspaceScope(membership.workspace_id, whatsapp_account.id),
-        role=membership.role,
-    )
-
-
-def resolve_single_workspace_context(session: Session, user: CurrentUser) -> RequestContext:
-    return resolve_workspace_context(session, user, requested_workspace_id=None)
-
-
-def active_workspace_membership_count(session: Session, auth_user_id: str) -> int:
-    return len(
-        list(
-            session.scalars(
-                select(WorkspaceMember.id).where(
-                    WorkspaceMember.auth_user_id == auth_user_id,
-                    WorkspaceMember.status == "active",
-                )
-            ).all()
-        )
-    )
-
-
-def resolve_dashboard_context(session: Session, request: Request) -> RequestContext:
-    return resolve_single_workspace_context(session, current_user_from_request(request))
+def resolve_dashboard_context(request: Request) -> RequestContext:
+    return RequestContext(user=current_user_from_request(request))

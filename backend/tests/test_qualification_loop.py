@@ -14,7 +14,6 @@ from app.pipeline import run_qualification
 from app.schemas import PropertyIn
 from app.seed import seed_all
 from app.services import append_message, get_or_create_active_conversation, get_or_create_contact, upsert_property
-from app.tenant import WorkspaceScope, reset_workspace_scope, set_current_workspace_scope
 
 
 @pytest.fixture
@@ -22,13 +21,11 @@ def session():
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    token = set_current_workspace_scope(WorkspaceScope())
     try:
         with SessionLocal() as db:
             seed_all(db)
             yield db
     finally:
-        reset_workspace_scope(token)
         engine.dispose()
 
 

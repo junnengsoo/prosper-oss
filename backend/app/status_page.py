@@ -110,7 +110,6 @@ def render_conversations(session: Session) -> str:
             f'<td><a href="/demo/conversations/{conversation.id}">#{conversation.id}</a></td>'
             f"<td>{escape(contact.display_name or contact.chat_jid if contact else '-')}</td>"
             f"<td>{badge(conversation.current_stage or '-', status_tone(conversation.current_stage))}</td>"
-            f"<td>{escape(conversation.host_property_id or '-')}</td>"
             f"<td>{escape(conversation.matched_property_id or '-')}</td>"
             f"<td>{escape(message.direction if message else '-')}</td>"
             f"<td>{preview(message.text if message else None)}</td>"
@@ -296,9 +295,8 @@ async def render_demo_conversation(session: Session, runtime: dict[str, Any], co
         '<section class="panel">'
         f"<h2>{escape(contact.display_name or contact.chat_jid if contact else title)}</h2>"
         f"<p>{badge(conversation.current_stage or '-', status_tone(conversation.current_stage))} "
-        f"Host: {escape(conversation.host_property_id or '-')} "
         f"Current: {escape(conversation.matched_property_id or '-')} "
-        f"Suggested: {escape(conversation.current_suggested_property_id or '-')}</p>"
+        f"</p>"
         '<div class="actions">'
         + (
             f'<form method="post" action="/demo/conversations/{conversation.id}/close">'

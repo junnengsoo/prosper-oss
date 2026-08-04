@@ -58,7 +58,7 @@ Deterministic Playbook action planner
 
 The FastAPI backend owns business logic, persistence, prompts, state transitions, and outbound action planning. The React dashboard provides the operator interface and simulator. The TypeScript bridge owns WhatsApp connectivity and forwards normalized messages to the backend.
 
-The dashboard uses one configured application password rather than requiring a user database or workspace-selection flow. Successful login creates a signed, expiring `HttpOnly` session cookie. The WhatsApp bridge remains separately authenticated with its bridge token; browser sessions are not used for inbound bridge events.
+The dashboard uses one configured application password rather than requiring a user database or account-selection flow. Successful login creates a signed, expiring `HttpOnly` session cookie. The WhatsApp bridge remains separately authenticated with its bridge token; browser sessions are not used for inbound bridge events.
 
 ## Reliability Decisions
 

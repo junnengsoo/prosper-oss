@@ -11,36 +11,9 @@ MessageSource = Literal["whatsapp", "fake_chat"]
 MediaType = Literal["photo", "video"]
 
 
-class WorkspaceOut(BaseModel):
-    id: str
-    slug: str
-    name: str
-    status: str
-    role: Optional[str] = None
-
-    model_config = {"from_attributes": True}
-
-
-class WhatsappAccountOut(BaseModel):
-    id: str
-    workspace_id: str
-    account_key: str
-    phone_jid: Optional[str]
-    display_name: Optional[str]
-    bridge_base_url: Optional[str]
-    status: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class MeOut(BaseModel):
     auth_user_id: str
     email: Optional[str]
-    workspace: Optional[WorkspaceOut] = None
-    workspaces: list[WorkspaceOut]
-    whatsapp_account_id: Optional[str] = None
 
 
 class AuthLoginIn(BaseModel):
@@ -75,7 +48,6 @@ class ConversationOut(BaseModel):
     source: str
     status: str
     current_stage: Optional[str]
-    host_property_id: Optional[str]
     matched_property_id: Optional[str]
     latest_message_text: Optional[str] = None
     latest_message_timestamp_ms: Optional[int] = None
@@ -225,7 +197,6 @@ class PropertyPlaybookIn(BaseModel):
 
 class PropertyPlaybookOut(PropertyPlaybookIn):
     id: Optional[int] = None
-    workspace_id: str
     property_id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

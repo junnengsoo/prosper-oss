@@ -4,7 +4,7 @@ Prosper uses explicit controls around model-backed work.
 
 ## Duplicate and Replay Safety
 
-Inbound messages are uniquely identified within the workspace, account, chat, and message ID. Replayed bridge events therefore do not create duplicate stored messages or duplicate conversations.
+Inbound messages are uniquely identified by chat and message ID. Replayed bridge events therefore do not create duplicate stored messages or duplicate conversations.
 
 ## State Gates
 

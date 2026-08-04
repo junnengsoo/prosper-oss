@@ -44,7 +44,6 @@ import {
   type PropertyRecord,
   type RuntimeStatus,
   type StageRun,
-  type SwingCandidate,
   type WhatsappConnection,
   type WhatsappQr,
 } from "./api";
@@ -58,10 +57,10 @@ import {
 } from "./viewState";
 import "./styles.css";
 
-type WorkflowKey = "initial_reply_blocks" | "qualification_suitable_blocks" | "qualification_not_suitable_blocks" | "swing_suggestion_blocks";
+type WorkflowKey = "initial_reply_blocks" | "qualification_suitable_blocks" | "qualification_not_suitable_blocks";
 type EditorSection = "facts" | "gallery" | "auto_replies";
-type AutoReplyField = "availableInitial" | "unavailableSwing";
-type AutoReplyWorkflowKey = "initial_reply_blocks" | "swing_suggestion_blocks";
+type AutoReplyField = "availableInitial";
+type AutoReplyWorkflowKey = "initial_reply_blocks";
 type ListingIntent = "rental" | "sale";
 type PropertyRequiredField = "property_name" | "status" | "property_type" | "property_url";
 
@@ -70,8 +69,7 @@ const PROPERTY_REQUIRED_FIELDS: PropertyRequiredField[] = ["property_name", "sta
 const WORKFLOWS: Array<{ key: WorkflowKey; label: string; help: string }> = [
   { key: "initial_reply_blocks", label: "Initial Reply", help: "Sent after Prosper matches this listing." },
   { key: "qualification_suitable_blocks", label: "Suitable", help: "Sent when the tenant profile is suitable." },
-  { key: "qualification_not_suitable_blocks", label: "Not Suitable", help: "Sent when unsuitable and no swing suggestion is used." },
-  { key: "swing_suggestion_blocks", label: "Swing Suggestion", help: "Sent when an alternative listing is suggested." },
+  { key: "qualification_not_suitable_blocks", label: "Not Suitable", help: "Sent when the tenant profile is unsuitable." },
 ];
 
 const EDITOR_SECTIONS: Array<{ key: EditorSection; label: string }> = [
@@ -80,12 +78,11 @@ const EDITOR_SECTIONS: Array<{ key: EditorSection; label: string }> = [
   { key: "auto_replies", label: "Auto Replies" },
 ];
 
-const PLACEHOLDERS = ["{unit_info}", "{property_guru_listing}", "{swing_unit_url}"];
+const PLACEHOLDERS = ["{unit_info}", "{property_guru_listing}"];
 const DEFAULT_MESSAGE_DELAY_SECONDS = 0.5;
 
 const DEFAULT_AUTO_REPLIES: Record<AutoReplyField, string> = {
   availableInitial: "Hi, yes this unit is still available.",
-  unavailableSwing: "Sorry this unit is not available.\n\nI have another unit nearby would you be keen? {swing_unit_url}",
 };
 
 const DEFAULT_SALE_AVAILABLE_MESSAGE = "Hi, yes this listing is still available for sale.";
@@ -116,7 +113,6 @@ const DEFAULT_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[]> = {
     { type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS },
     { type: "message", text: DEFAULT_PROFILE_DETAILS_MESSAGE },
   ],
-  unavailableSwing: [{ type: "message", text: DEFAULT_AUTO_REPLIES.unavailableSwing }],
 };
 
 const DEFAULT_SALE_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[]> = {
@@ -125,7 +121,6 @@ const DEFAULT_SALE_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[]>
     { type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS },
     { type: "message", text: DEFAULT_SALE_DETAILS_MESSAGE },
   ],
-  unavailableSwing: [{ type: "message", text: DEFAULT_AUTO_REPLIES.unavailableSwing }],
 };
 
 const LEGACY_AUTO_REPLY_DEFAULTS: Record<AutoReplyField, string[]> = {
@@ -133,15 +128,10 @@ const LEGACY_AUTO_REPLY_DEFAULTS: Record<AutoReplyField, string[]> = {
     "Hi, thanks for enquiring about {unit_info}. I'm the listing agent.",
     "Hi there! Thank you for inquiring about {unit_info}. I'm the listing agent.",
   ],
-  unavailableSwing: [
-    "This unit may no longer be available, but I can recommend this similar unit: {unit_info}",
-    "This unit may not be suitable, but I have another option that may work better: {unit_info}",
-  ],
 };
 
 const STOCK_GALLERY_CAPTIONS = new Set([
   "Here are some photos of the unit.",
-  "Here are some photos of the alternative unit.",
 ]);
 
 const EMPTY_PROPERTY_FORM: PropertyInput = {
@@ -166,7 +156,6 @@ function emptyPlaybook(): PropertyPlaybookInput {
     initial_reply_blocks: [],
     qualification_suitable_blocks: [],
     qualification_not_suitable_blocks: [],
-    swing_suggestion_blocks: [],
   };
 }
 
@@ -176,7 +165,6 @@ function playbookToInput(playbook: PropertyPlaybook | null | undefined): Propert
     initial_reply_blocks: playbook?.initial_reply_blocks ?? [],
     qualification_suitable_blocks: playbook?.qualification_suitable_blocks ?? [],
     qualification_not_suitable_blocks: playbook?.qualification_not_suitable_blocks ?? [],
-    swing_suggestion_blocks: playbook?.swing_suggestion_blocks ?? [],
   };
 }
 
@@ -202,10 +190,6 @@ function defaultPlaybookInput(intent: ListingIntent = "rental"): PropertyPlayboo
     ],
     qualification_suitable_blocks: [],
     qualification_not_suitable_blocks: [],
-    swing_suggestion_blocks: [
-      ...sequences.unavailableSwing,
-      { type: "gallery", mode: "enabled_property_gallery" },
-    ],
   };
 }
 
@@ -225,14 +209,13 @@ function effectiveAutoReplyInput(playbook: PropertyPlaybook | null | undefined, 
     initial_reply_blocks: autoReplyWorkflowBlocks("availableInitial", input.initial_reply_blocks, intent),
     qualification_suitable_blocks: [],
     qualification_not_suitable_blocks: [],
-    swing_suggestion_blocks: autoReplyWorkflowBlocks("unavailableSwing", input.swing_suggestion_blocks, intent),
   };
 }
 
 function normalizeAutoReplyDefault(field: AutoReplyField, value: string): string {
   const normalized = value.trim();
   const text = LEGACY_AUTO_REPLY_DEFAULTS[field].some((legacy) => legacy.trim() === normalized) ? DEFAULT_AUTO_REPLIES[field] : value;
-  return text.split("{suggested_property_url}").join("{swing_unit_url}");
+  return text;
 }
 
 function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReplyField, intent: ListingIntent = "rental"): PlaybookBlock[] {
@@ -260,7 +243,7 @@ function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[],
 }
 
 function autoReplyWorkflowKey(field: AutoReplyField): AutoReplyWorkflowKey {
-  return field === "availableInitial" ? "initial_reply_blocks" : "swing_suggestion_blocks";
+  return "initial_reply_blocks";
 }
 
 function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, intent: ListingIntent = "rental"): PlaybookBlock[] {
@@ -299,7 +282,6 @@ function cleanAutoRepliesForSave(input: PropertyPlaybookInput, intent: ListingIn
     initial_reply_blocks: cleanAutoReplyBlocksForSave(input.initial_reply_blocks, "availableInitial", intent),
     qualification_suitable_blocks: [],
     qualification_not_suitable_blocks: [],
-    swing_suggestion_blocks: cleanAutoReplyBlocksForSave(input.swing_suggestion_blocks, "unavailableSwing", intent),
   };
 }
 
@@ -403,7 +385,7 @@ function stageSummary(run?: StageRun | null): string {
   if (!run.output_json) return `${run.stage} completed.`;
   try {
     const parsed = JSON.parse(run.output_json) as Record<string, unknown>;
-    const direct = parsed.reason || parsed.summary || parsed.status || parsed.match_status || parsed.qualification_status || parsed.swing_status;
+    const direct = parsed.reason || parsed.summary || parsed.status || parsed.match_status || parsed.qualification_status;
     return typeof direct === "string" ? direct : JSON.stringify(parsed).slice(0, 160);
   } catch {
     return run.output_json.slice(0, 160);
@@ -430,12 +412,7 @@ function replacePlaceholders(text: string, property: PropertyRecord | null | und
     ["{unit_info}", unitInfo],
     ["{tenant_notes}", property?.tenant_facing_caveats || ""],
     ["{tenant_facing_caveats}", property?.tenant_facing_caveats || ""],
-    ["{suggested_property_name}", property?.property_name || ""],
-    ["{suggested_unit_info}", unitInfo],
-    ["{suggested_tenant_notes}", property?.tenant_facing_caveats || ""],
-    ["{suggested_property_url}", property?.property_url || ""],
     ["{property_guru_listing}", property?.property_url || ""],
-    ["{swing_unit_url}", property?.property_url || ""],
   ].reduce((current, [token, value]) => current.split(token).join(value), text);
 }
 
@@ -453,7 +430,6 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [playbooks, setPlaybooks] = useState<PropertyPlaybook[]>([]);
-  const [swingCandidates, setSwingCandidates] = useState<SwingCandidate[]>([]);
   const [stageRuns, setStageRuns] = useState<StageRun[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [whatsappPanelOpen, setWhatsappPanelOpen] = useState(false);
@@ -477,7 +453,6 @@ function App() {
   const [propertyForm, setPropertyForm] = useState<PropertyInput>({ ...EMPTY_PROPERTY_FORM });
   const [propertyFormErrors, setPropertyFormErrors] = useState<Partial<Record<PropertyRequiredField, string>>>({});
   const [mediaPathForm, setMediaPathForm] = useState({ file_path: "", caption: "", sort_order: 0, enabled: true, media_type: "photo" as "photo" | "video" });
-  const [swingForm, setSwingForm] = useState({ candidate_property_id: "", sort_order: 1, enabled: true });
 
   const [selectedPlaybookPropertyId, setSelectedPlaybookPropertyId] = useState("");
   const [workflowKey, setWorkflowKey] = useState<WorkflowKey>("initial_reply_blocks");
@@ -546,12 +521,11 @@ function App() {
       api.conversations(true),
       includeSetup ? api.properties() : Promise.resolve(null),
       includeSetup ? api.playbooks() : Promise.resolve(null),
-      includeSetup ? api.swingCandidates() : Promise.resolve(null),
       api.stageRuns(),
       includeSetup ? api.config() : Promise.resolve(null),
       api.runtimeStatus(),
     ]);
-    const [contactsResult, conversationsResult, propertiesResult, playbooksResult, swingResult, stageResult, configResult, runtimeResult] = results;
+    const [contactsResult, conversationsResult, propertiesResult, playbooksResult, stageResult, configResult, runtimeResult] = results;
     const nextWarnings: string[] = [];
 
     if (contactsResult.status === "fulfilled") setContacts(contactsResult.value);
@@ -562,8 +536,6 @@ function App() {
     else if (propertiesResult.status === "rejected") nextWarnings.push(`Properties: ${propertiesResult.reason}`);
     if (playbooksResult.status === "fulfilled" && playbooksResult.value) setPlaybooks(playbooksResult.value);
     else if (playbooksResult.status === "rejected") nextWarnings.push(`Playbooks: ${playbooksResult.reason}`);
-    if (swingResult.status === "fulfilled" && swingResult.value) setSwingCandidates(swingResult.value);
-    else if (swingResult.status === "rejected") nextWarnings.push(`Swing candidates: ${swingResult.reason}`);
     if (stageResult.status === "fulfilled") setStageRuns(stageResult.value);
     else nextWarnings.push(`Stage runs: ${stageResult.reason}`);
     if (configResult.status === "fulfilled" && configResult.value) setConfig(configResult.value.values);
@@ -703,13 +675,7 @@ function App() {
 
   const editingProperty = editingPropertyId && editingPropertyId !== "__new__" ? properties.find((property) => property.property_id === editingPropertyId) ?? null : null;
   const editingMedia = editingProperty?.media ?? [];
-  const editingSwingCandidates = editingPropertyId && editingPropertyId !== "__new__" ? swingCandidates.filter((candidate) => candidate.source_property_id === editingPropertyId) : [];
-  const editingFallbackCandidate = editingSwingCandidates.find((candidate) => candidate.enabled) ?? editingSwingCandidates[0] ?? null;
-  const fallbackDirty = Boolean(editingPropertyId && editingPropertyId !== "__new__") && (
-    (editingFallbackCandidate?.candidate_property_id ?? "") !== swingForm.candidate_property_id ||
-    (editingFallbackCandidate?.enabled ?? true) !== swingForm.enabled
-  );
-  const autoRepliesDirty = playbookDirty || fallbackDirty;
+  const autoRepliesDirty = playbookDirty;
 
   const fakeConversations = conversations.filter((conversation) => conversation.source === "fake_chat");
   const selectedFakeConversation = selectedFakeConversationId ? fakeConversations.find((conversation) => conversation.id === selectedFakeConversationId) ?? null : null;
@@ -765,17 +731,10 @@ function App() {
   }
 
   function openPropertyEditor(property: PropertyRecord) {
-    const fallback = swingCandidates.find((candidate) => candidate.source_property_id === property.property_id && candidate.enabled) ??
-      swingCandidates.find((candidate) => candidate.source_property_id === property.property_id);
     setEditingPropertyId(property.property_id);
     setSelectedPlaybookPropertyId(property.property_id);
     setPropertyForm(propertyToInput(property));
     setPropertyFormErrors({});
-    setSwingForm({
-      candidate_property_id: fallback?.candidate_property_id ?? "",
-      sort_order: fallback?.sort_order ?? 1,
-      enabled: fallback?.enabled ?? true,
-    });
     setEditorSection("facts");
     setActiveView("properties");
   }
@@ -785,7 +744,6 @@ function App() {
     setSelectedPlaybookPropertyId("");
     setPropertyForm({ ...EMPTY_PROPERTY_FORM });
     setPropertyFormErrors({});
-    setSwingForm({ candidate_property_id: "", sort_order: 1, enabled: true });
     setPlaybookDraft(defaultPlaybookInput("rental"));
     setPlaybookBaseline(defaultPlaybookInput("rental"));
     setEditorSection("facts");
@@ -848,7 +806,7 @@ function App() {
 
   async function savePropertyAndExit() {
     const saved = await saveProperty();
-    if (autoRepliesDirty) await saveAutoRepliesForProperty(saved.property_id, editingSwingCandidates);
+    if (autoRepliesDirty) await saveAutoRepliesForProperty(saved.property_id);
     setEditingPropertyId(null);
   }
 
@@ -857,7 +815,7 @@ function App() {
     if (!count) return false;
     const label = count === 1 ? "this property" : `${count} properties`;
     return window.confirm(
-      `Delete ${label}?\n\nThis removes property setup, gallery records, Playbooks, and swing candidate links.\n\nHistorical chats and AI audit logs will remain.`,
+      `Delete ${label}?\n\nThis removes property setup, gallery records, and Playbooks.\n\nHistorical chats and AI audit logs will remain.`,
     );
   }
 
@@ -905,22 +863,13 @@ function App() {
     await loadAll();
   }
 
-  async function saveAutoRepliesForProperty(propertyId: string, existingSwingCandidates: SwingCandidate[] = editingSwingCandidates) {
+  async function saveAutoRepliesForProperty(propertyId: string) {
     const intent = listingIntentFromValue(propertyForm.property_type);
     const payload = cleanAutoRepliesForSave(playbookDraft, intent);
     const saved = await api.upsertPropertyPlaybook(propertyId, payload);
     const input = effectiveAutoReplyInput(saved, intent);
     setPlaybookDraft(input);
     setPlaybookBaseline(input);
-    await Promise.all(existingSwingCandidates.map((candidate) => api.deleteSwingCandidate(candidate.id)));
-    if (swingForm.candidate_property_id) {
-      await api.upsertSwingCandidate({
-        source_property_id: propertyId,
-        candidate_property_id: swingForm.candidate_property_id,
-        sort_order: 1,
-        enabled: swingForm.enabled,
-      });
-    }
     await loadAll();
   }
 
@@ -985,8 +934,8 @@ function App() {
     return (
       <main className="loginScreen">
         <form className="loginCard" onSubmit={login}>
-          <strong>Prosper Agent Workspace</strong>
-          <span>Enter the workspace password to continue.</span>
+          <strong>Prosper Agent</strong>
+          <span>Enter the application password to continue.</span>
           <input value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} placeholder="Password" type="password" />
           {loginError && <p className="formError">{loginError}</p>}
           <button className="primaryButton" disabled={loginBusy}>{loginBusy ? "Signing in..." : "Sign in"}</button>
@@ -998,7 +947,7 @@ function App() {
   return (
     <main className="appFrame">
       <Sidebar activeView={activeView} setActiveView={setActiveView} />
-      <section className="workspaceFrame">
+      <section className="appContentFrame">
         <TopBar
           activeView={activeView}
           runtimeStatus={runtimeStatus}
@@ -1051,8 +1000,6 @@ function App() {
         {activeView === "properties" && !editingPropertyId && (
           <PropertiesView
             properties={filteredProperties}
-            allProperties={properties}
-            swingCandidates={swingCandidates}
             selectedPropertyIds={selectedPropertyIds}
             setSelectedPropertyIds={setSelectedPropertyIds}
             search={propertySearch}
@@ -1075,9 +1022,6 @@ function App() {
             media={editingMedia}
             mediaPathForm={mediaPathForm}
             setMediaPathForm={setMediaPathForm}
-            allProperties={properties}
-            swingForm={swingForm}
-            setSwingForm={setSwingForm}
             playbookDraft={playbookDraft}
             playbookDirty={autoRepliesDirty}
             setPlaybookDraft={setPlaybookDraft}
@@ -1431,8 +1375,6 @@ function InboxView({
 
 function PropertiesView({
   properties,
-  allProperties,
-  swingCandidates,
   selectedPropertyIds,
   setSelectedPropertyIds,
   search,
@@ -1442,8 +1384,6 @@ function PropertiesView({
   onDeleteSelected,
 }: {
   properties: PropertyRecord[];
-  allProperties: PropertyRecord[];
-  swingCandidates: SwingCandidate[];
   selectedPropertyIds: string[];
   setSelectedPropertyIds: React.Dispatch<React.SetStateAction<string[]>>;
   search: string;
@@ -1499,7 +1439,6 @@ function PropertiesView({
       <div className="listingStack">
         {properties.length === 0 && <EmptyState title="No properties yet" body="Create or seed properties to manage listing workflows." />}
         {properties.map((property) => {
-          const candidates = swingCandidates.filter((candidate) => candidate.source_property_id === property.property_id);
           const enabledMedia = property.media.filter((media) => media.enabled);
           return (
             <article key={property.property_id} className="listingCard">
@@ -1523,7 +1462,6 @@ function PropertiesView({
                   </div>
                 </div>
                 <div className="listingMeta">
-                  <div><span>Swing unit</span><strong>{candidates[0] ? allProperties.find((item) => item.property_id === candidates[0].candidate_property_id)?.property_name || candidates[0].candidate_property_id : "Not configured"}</strong></div>
                   <div><span>Gallery</span><strong>{enabledMedia.length} enabled</strong></div>
                 </div>
                 <div className="listingActions">
@@ -1560,9 +1498,6 @@ function PropertyEditorView({
   media,
   mediaPathForm,
   setMediaPathForm,
-  allProperties,
-  swingForm,
-  setSwingForm,
   playbookDraft,
   playbookDirty,
   setPlaybookDraft,
@@ -1584,9 +1519,6 @@ function PropertyEditorView({
   media: PropertyMedia[];
   mediaPathForm: { file_path: string; caption: string; sort_order: number; enabled: boolean; media_type: "photo" | "video" };
   setMediaPathForm: (form: { file_path: string; caption: string; sort_order: number; enabled: boolean; media_type: "photo" | "video" }) => void;
-  allProperties: PropertyRecord[];
-  swingForm: { candidate_property_id: string; sort_order: number; enabled: boolean };
-  setSwingForm: (form: { candidate_property_id: string; sort_order: number; enabled: boolean }) => void;
   playbookDraft: PropertyPlaybookInput;
   playbookDirty: boolean;
   setPlaybookDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
@@ -1680,12 +1612,9 @@ function PropertyEditorView({
           {section === "auto_replies" && (
             <AutoRepliesEditor
               property={previewProperty}
-              allProperties={allProperties}
               draft={playbookDraft}
               dirty={playbookDirty}
               setDraft={setPlaybookDraft}
-              swingForm={swingForm}
-              setSwingForm={setSwingForm}
               config={config}
               disabled={!property}
             />
@@ -1698,31 +1627,19 @@ function PropertyEditorView({
 
 function AutoRepliesEditor({
   property,
-  allProperties,
   draft,
   dirty,
   setDraft,
-  swingForm,
-  setSwingForm,
   config,
   disabled,
 }: {
   property: PropertyRecord | null;
-  allProperties: PropertyRecord[];
   draft: PropertyPlaybookInput;
   dirty: boolean;
   setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  swingForm: { candidate_property_id: string; sort_order: number; enabled: boolean };
-  setSwingForm: (form: { candidate_property_id: string; sort_order: number; enabled: boolean }) => void;
   config: Record<string, string>;
   disabled: boolean;
 }) {
-  const fallbackProperty = allProperties.find((item) => item.property_id === swingForm.candidate_property_id) ?? null;
-  const availableSwingProperties = allProperties.filter((item) => item.property_id !== property?.property_id && item.status === "available");
-  const selectedSwingCandidateIsListed = availableSwingProperties.some((item) => item.property_id === swingForm.candidate_property_id);
-  const selectedSwingUnitUnavailable = Boolean(
-    swingForm.candidate_property_id && (!fallbackProperty || fallbackProperty.status !== "available"),
-  );
   const intent = listingIntentFromValue(property?.property_type);
 
   return (
@@ -1762,70 +1679,12 @@ function AutoRepliesEditor({
           <div className="mediaStepNote"><ImageIcon size={17} /> Prosper sends this unit's media after the reply.</div>
         </article>
 
-        <article className="replyGroup">
-          <header>
-            <strong>When Unit Is Unavailable</strong>
-            <span>Prosper suggests the selected swing unit only when one is configured.</span>
-          </header>
-          <Field label="Swing unit" wide>
-            <select value={swingForm.candidate_property_id} onChange={(event) => setSwingForm({ ...swingForm, candidate_property_id: event.target.value, enabled: true })} disabled={disabled}>
-              <option value="">No swing unit selected</option>
-              {swingForm.candidate_property_id && !selectedSwingCandidateIsListed && (
-                <option value={swingForm.candidate_property_id}>
-                  {fallbackProperty ? `${fallbackProperty.property_name} (${fallbackProperty.status})` : `${swingForm.candidate_property_id} (missing)`}
-                </option>
-              )}
-              {availableSwingProperties.map((item) => (
-                <option key={item.property_id} value={item.property_id}>
-                  {item.property_name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {selectedSwingUnitUnavailable && (
-            <div className="fallbackReplyNote danger">
-              <AlertTriangle size={17} />
-              This saved swing unit is no longer available. Prosper will not send its name, link, gallery, or video. Replace it with an available unit.
-            </div>
-          )}
-          <div className={classNames("fallbackReplyNote", !fallbackProperty && "warning", selectedSwingUnitUnavailable && "danger")}>
-            <MessageSquare size={17} />
-            {selectedSwingUnitUnavailable
-              ? "This saved swing unit needs to be replaced before Prosper can send an unavailable-unit reply."
-              : fallbackProperty
-              ? `If this unit is unavailable, Prosper suggests ${fallbackProperty.property_name} and sends that unit's gallery media.`
-              : "No swing unit selected. Prosper will not send an unavailable auto-reply."}
-          </div>
-          <AutoReplySequence
-            field="unavailableSwing"
-            blocks={autoReplyBlocks(draft, "unavailableSwing", intent)}
-            setDraft={setDraft}
-            disabled={disabled}
-            intent={intent}
-          />
-          <div className="mediaStepNote">
-            <ImageIcon size={17} />
-            {selectedSwingUnitUnavailable
-              ? "Gallery will not be sent while the saved swing unit is unavailable or missing."
-              : fallbackProperty
-              ? `Gallery step sends media from ${fallbackProperty.property_name}. Use {swing_unit_url} or {property_guru_listing} for this swing unit's listing link.`
-              : "Choose a swing unit to send that unit's gallery media after the reply. Use {swing_unit_url} or {property_guru_listing} for its listing link."}
-          </div>
-        </article>
       </div>
 
       <aside className="autoPreviewPane">
         <div>
           <span className="eyebrow">Available Preview</span>
           <WhatsAppPreview property={property} blocks={draft.initial_reply_blocks} config={config} />
-        </div>
-        <div>
-          <span className="eyebrow">Unavailable Preview</span>
-          {fallbackProperty && !selectedSwingUnitUnavailable ? (
-            <WhatsAppPreview property={fallbackProperty} blocks={draft.swing_suggestion_blocks} config={config} />
-          ) : (
-            <div className="previewEmpty">No message will be sent unless a swing unit is selected.</div>
-          )}
         </div>
       </aside>
     </section>

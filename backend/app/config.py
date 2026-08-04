@@ -34,7 +34,6 @@ class Settings(BaseSettings):
     langfuse_base_url: str = ""
     langfuse_host: str = ""
     bridge_base_url: str = "http://127.0.0.1:8788"
-    whatsapp_account_id: str = ""
     whatsapp_pa_bridge_token: str = ""
     auth_required: bool = False
     access_password: str = ""
