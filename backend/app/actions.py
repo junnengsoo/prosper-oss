@@ -1,0 +1,651 @@
+from __future__ import annotations
+
+import asyncio
+from dataclasses import asdict, dataclass
+from dataclasses import replace
+from datetime import datetime
+import json
+from typing import Any
+
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
+
+from .media_storage import describe_media_storage
+from .models import Contact, Conversation, Message, Property, PropertyMedia
+from .playbooks import (
+    RenderedPlaybookPart,
+    enabled_blocks_for_stage,
+    get_property_playbook,
+    render_playbook_blocks,
+)
+from .supabase_storage import create_signed_url_for_supabase_object, supabase_storage_config_from_settings
+from .services import (
+    append_message,
+    bridge_base_url_for_conversation,
+    list_property_media,
+    send_property_media_via_bridge,
+    send_via_bridge,
+    split_outbound_parts,
+)
+from .app_config import get_config_value
+from .swing import stale_swing_property_diagnostic, swing_property_is_available
+from .tenant import WorkspaceScope, workspace_conditions
+
+
+@dataclass(frozen=True)
+class OutboundAction:
+    """A deterministic send instruction derived from AI stage output."""
+
+    action_type: str
+    stage: str
+    reason: str = ""
+    property_id: str | None = None
+    playbook_property_id: str | None = None
+    message: str = ""
+    blocks: list[dict[str, Any]] | None = None
+    diagnostic: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a compact JSON-friendly representation for API inspection."""
+        return {
+            key: value
+            for key, value in asdict(self).items()
+            if value is not None and value != "" and value is not False
+        }
+
+
+@dataclass(frozen=True)
+class SentActionResult:
+    """Result of executing one outbound action immediately."""
+
+    status: str
+    action: dict[str, Any]
+    reason: str = ""
+    bridge_message_ids: list[str] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = {"status": self.status, "action": self.action, "reason": self.reason}
+        if self.bridge_message_ids is not None:
+            payload["bridge_message_ids"] = self.bridge_message_ids
+        return payload
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Return dictionaries unchanged and normalize all other values to an empty dict."""
+    return value if isinstance(value, dict) else {}
+
+
+def _unit_matching_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
+    """Extract unit-matching output from either direct or nested pipeline results."""
+    if "match_status" in pipeline_result:
+        return pipeline_result
+    return _as_dict(pipeline_result.get("unit_matching"))
+
+
+def _qualification_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
+    """Extract qualification output from direct, nested, or qualification+swinging results."""
+    if "qualification_status" in pipeline_result:
+        return pipeline_result
+    qualification = _as_dict(pipeline_result.get("qualification"))
+    if "qualification_status" in qualification:
+        return qualification
+    return _as_dict(qualification.get("qualification"))
+
+
+def _swinging_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
+    """Extract swinging output from direct results or nested qualification results."""
+    if "swing_status" in pipeline_result:
+        return pipeline_result
+    swinging = _as_dict(pipeline_result.get("swinging"))
+    if swinging:
+        return swinging
+    qualification = _as_dict(pipeline_result.get("qualification"))
+    return _as_dict(qualification.get("swinging"))
+
+
+def _profile_present(unit_matching: dict[str, Any]) -> bool:
+    """Check whether unit matching says the tenant profile was already provided."""
+    return str(unit_matching.get("profile_info_status") or "").strip().lower() == "profile_present"
+
+
+def _matched_property_id(unit_matching: dict[str, Any], conversation: Conversation) -> str | None:
+    """Resolve the property to use for unit-matching follow-up actions."""
+    matched = unit_matching.get("matched_properties") or []
+    if isinstance(matched, list) and len(matched) == 1 and isinstance(matched[0], dict):
+        property_id = matched[0].get("property_id")
+        if isinstance(property_id, str) and property_id:
+            return property_id
+    return conversation.matched_property_id
+
+
+def _suggested_swing_property_id(swinging: dict[str, Any]) -> str | None:
+    """Resolve the property ID selected or suggested by the swinging stage."""
+    current = swinging.get("current_suggested_property") or {}
+    if isinstance(current, dict):
+        property_id = current.get("property_id")
+        if isinstance(property_id, str) and property_id:
+            return property_id
+    selected = swinging.get("selected_property_id")
+    return selected if isinstance(selected, str) and selected else None
+
+
+def _matched_unit_unavailable(unit_matching: dict[str, Any], qualification: dict[str, Any]) -> bool:
+    """Detect when the current unit-matching result found an unavailable unit."""
+    return unit_matching.get("matched_property_status") == "unavailable" and not qualification
+
+
+def _property_for_conversation(session: Session, conversation: Conversation, property_id: str | None = None) -> Property | None:
+    """Resolve a property inside the conversation workspace."""
+    resolved_id = property_id or conversation.matched_property_id
+    if not resolved_id:
+        return None
+    scope = WorkspaceScope(conversation.workspace_id, conversation.whatsapp_account_id)
+    return session.scalar(
+        select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == resolved_id)
+    )
+
+
+def _playbook_action(
+    session: Session,
+    conversation: Conversation,
+    *,
+    stage: str,
+    field_name: str,
+    property_id: str | None,
+    reason: str = "",
+    suggested_property_id: str | None = None,
+) -> OutboundAction | None:
+    playbook_property_id = property_id
+    playbook = get_property_playbook(session, playbook_property_id) if playbook_property_id else None
+    blocks = enabled_blocks_for_stage(playbook, field_name)
+    if blocks:
+        return OutboundAction(
+            action_type="send_playbook",
+            stage=stage,
+            property_id=suggested_property_id or property_id,
+            playbook_property_id=playbook_property_id,
+            blocks=blocks,
+            reason=reason,
+        )
+    return None
+
+
+def _stale_swing_action(
+    session: Session,
+    *,
+    configured_swing_property_id: str,
+    property_: Property | None,
+) -> OutboundAction:
+    diagnostic = stale_swing_property_diagnostic(configured_swing_property_id, property_)
+    fallback = get_config_value(session, "stale_swing_property_fallback_reply").strip()
+    if fallback:
+        return OutboundAction(
+            action_type="send_message",
+            stage="swinging",
+            message=fallback,
+            reason=diagnostic["reason"],
+            diagnostic=diagnostic,
+        )
+    return OutboundAction(
+        action_type="needs_review",
+        stage="swinging",
+        reason=diagnostic["reason"],
+        diagnostic=diagnostic,
+    )
+
+
+def _validated_swing_playbook_action(
+    session: Session,
+    conversation: Conversation,
+    *,
+    field_name: str,
+    suggested_property_id: str,
+    reason: str,
+) -> OutboundAction | None:
+    suggested_property = _property_for_conversation(session, conversation, suggested_property_id)
+    if not swing_property_is_available(suggested_property):
+        return _stale_swing_action(
+            session,
+            configured_swing_property_id=suggested_property_id,
+            property_=suggested_property,
+        )
+    return _playbook_action(
+        session,
+        conversation,
+        stage="swinging",
+        field_name=field_name,
+        property_id=conversation.host_property_id or conversation.matched_property_id,
+        suggested_property_id=suggested_property_id,
+        reason=reason,
+    )
+
+
+def _qualification_message_action(
+    session: Session,
+    conversation: Conversation,
+    qualification: dict[str, Any],
+    *,
+    allow_not_match_reply: bool = True,
+) -> OutboundAction | None:
+    """Convert a qualification decision into a tenant-facing outbound action."""
+    status = qualification.get("qualification_status")
+    reason = str(qualification.get("reason") or "")
+    property_id = conversation.matched_property_id
+    if status == "match":
+        return _playbook_action(
+            session,
+            conversation,
+            stage="qualification",
+            field_name="qualification_suitable_blocks",
+            property_id=property_id,
+            reason=reason,
+        )
+    if status in {"incomplete", "clarify_fit"}:
+        message = str(qualification.get("message") or "").strip()
+        if not message:
+            return None
+        return OutboundAction(
+            action_type="send_message",
+            stage="qualification",
+            message=message,
+            reason=reason,
+        )
+    if status == "not_match":
+        if not allow_not_match_reply:
+            return None
+        return _playbook_action(
+            session,
+            conversation,
+            stage="qualification",
+            field_name="qualification_not_suitable_blocks",
+            property_id=property_id,
+            reason=reason,
+        )
+    return None
+
+
+def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str, Any], session: Session | None = None) -> list[OutboundAction]:
+    """Plan deterministic outbound actions from AI stage outputs."""
+    if session is None:
+        from .db import SessionLocal
+
+        with SessionLocal() as transient_session:
+            return plan_outbound_actions(conversation, pipeline_result, transient_session)
+
+    unit_matching = _unit_matching_result(pipeline_result)
+    qualification = _qualification_result(pipeline_result)
+    swinging = _swinging_result(pipeline_result)
+    actions: list[OutboundAction] = []
+
+    if unit_matching.get("match_status") == "matched" and unit_matching.get("matched_property_status") != "unavailable" and not qualification and not swinging:
+        property_id = _matched_property_id(unit_matching, conversation)
+        if property_id:
+            action = _playbook_action(
+                session,
+                conversation,
+                stage="unit_matching",
+                field_name="initial_reply_blocks",
+                property_id=property_id,
+                reason=str(unit_matching.get("reason") or ""),
+            )
+            return [action] if action else []
+
+    if qualification:
+        status = qualification.get("qualification_status")
+        if _profile_present(unit_matching) and status in {"match", "incomplete", "clarify_fit"}:
+            # Manual reruns can recreate this unit/media sequence because stage outputs are action-derived.
+            property_id = _matched_property_id(unit_matching, conversation)
+            if property_id:
+                action = _playbook_action(
+                    session,
+                    conversation,
+                    stage="unit_matching",
+                    field_name="initial_reply_blocks",
+                    property_id=property_id,
+                    reason=str(unit_matching.get("reason") or ""),
+                )
+                if action:
+                    actions.append(action)
+        if status == "not_match" and swinging.get("swing_status") == "suggest_alternative":
+            not_match = _qualification_message_action(session, conversation, qualification, allow_not_match_reply=False)
+            if not_match:
+                actions.append(not_match)
+            property_id = _suggested_swing_property_id(swinging)
+            if property_id:
+                action = _validated_swing_playbook_action(
+                    session,
+                    conversation,
+                    field_name="swing_suggestion_blocks",
+                    suggested_property_id=property_id,
+                    reason=str(swinging.get("reason") or ""),
+                )
+                if action:
+                    actions.append(action)
+            return actions
+        if status == "not_match":
+            action = _qualification_message_action(session, conversation, qualification)
+            return [action] if action else []
+        action = _qualification_message_action(session, conversation, qualification)
+        if action:
+            actions.append(action)
+        return actions
+
+    if swinging:
+        status = swinging.get("swing_status")
+        reason = str(swinging.get("reason") or "")
+        if status == "suggest_alternative":
+            property_id = _suggested_swing_property_id(swinging)
+            if property_id:
+                action = _validated_swing_playbook_action(
+                    session,
+                    conversation,
+                    field_name="swing_suggestion_blocks",
+                    suggested_property_id=property_id,
+                    reason=reason,
+                )
+                if action:
+                    actions.append(action)
+                return actions
+        if status == "stale_swing_property":
+            diagnostic = _as_dict(swinging.get("diagnostic"))
+            configured_id = str(diagnostic.get("configured_swing_property_id") or _suggested_swing_property_id(swinging) or "")
+            if configured_id:
+                property_ = _property_for_conversation(session, conversation, configured_id)
+                return [_stale_swing_action(session, configured_swing_property_id=configured_id, property_=property_)]
+            return []
+        if status == "answer_question":
+            message = str(swinging.get("tenant_reply") or "").strip()
+            if message:
+                return [OutboundAction(action_type="send_message", stage="swinging", message=message, reason=reason)]
+        if status == "proceed_to_qualification":
+            return [
+                OutboundAction(
+                    action_type="send_profile_form",
+                    stage="qualification",
+                    reason=reason or "Swing candidate accepted; profile form required before qualification.",
+                )
+            ]
+        if status == "no_good_candidate":
+            if actions:
+                return actions
+            return []
+        if status == "no_configured_candidate":
+            return []
+    return actions
+
+
+def _latest_message_for_conversation(session: Session, conversation_id: int) -> Message | None:
+    """Return the latest message for inspection/debug context."""
+    return session.scalar(
+        select(Message).where(Message.conversation_id == conversation_id).order_by(Message.timestamp_ms.desc())
+    )
+
+
+def _render_action_text(session: Session, action: OutboundAction) -> str:
+    """Render the text body for a planned action using direct messages or config snippets."""
+    if action.action_type == "send_message":
+        return action.message.strip()
+    if action.action_type == "send_playbook":
+        return ""
+    if action.action_type == "send_profile_form":
+        return f"To help me better serve you, please fill this up:\n\n{get_config_value(session, 'profile_form')}".strip()
+    return ""
+
+
+def _render_action_parts(
+    session: Session,
+    conversation: Conversation,
+    action: OutboundAction,
+) -> tuple[list[RenderedPlaybookPart], list[PropertyMedia]]:
+    """Render an action into structured text/delay/gallery parts and fallback media."""
+    if action.action_type == "send_playbook" and action.blocks:
+        property_ = _property_for_conversation(session, conversation, action.playbook_property_id or action.property_id)
+        suggested_property = _property_for_conversation(session, conversation, action.property_id)
+        rendered = render_playbook_blocks(
+            session,
+            action.blocks,
+            property_=property_,
+            suggested_property=suggested_property,
+        )
+        has_gallery = any(part.type == "gallery" for part in rendered)
+        if not has_gallery:
+            return rendered, []
+        media_property_id = action.property_id or action.playbook_property_id
+        media_items = list_property_media(session, media_property_id) if media_property_id else []
+        return rendered, media_items
+
+    text = _render_action_text(session, action)
+    rendered: list[RenderedPlaybookPart] = []
+    for part_type, value in split_outbound_parts(text):
+        rendered.append(RenderedPlaybookPart("gallery" if part_type == "media" else "text", text=value))
+    return rendered, []
+
+
+def _send_block_reason(session: Session, conversation: Conversation) -> str | None:
+    """Return a reason that blocks immediate sending, or None when safe to send."""
+    from .services import get_config_value, is_ai_paused
+
+    if conversation.source != "fake_chat" and get_config_value(session, "send_lock", "false").lower() == "true":
+        return "send_lock_enabled"
+    if is_ai_paused(session):
+        return "ai_pause_enabled"
+    if conversation.status != "active":
+        return f"conversation_{conversation.status}"
+    contact = session.get(Contact, conversation.contact_id)
+    if not contact:
+        return "contact_not_found"
+    if contact.status != "active":
+        return f"contact_{contact.status}"
+    if conversation.source not in {"whatsapp", "fake_chat"}:
+        return f"source_{conversation.source}"
+    return None
+
+
+def _auto_reply_already_sent(session: Session, conversation: Conversation) -> bool:
+    """Check whether Prosper has already sent an automated reply sequence in this conversation."""
+    return (
+        session.scalar(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.direction == "outbound",
+                or_(Message.raw_type == "action_send", Message.raw_type.like("action_media_%")),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _record_outbound_action_audit(session: Session, conversation: Conversation, result: dict[str, Any]) -> None:
+    """Persist the outbound decision so skipped and blocked sends are debuggable later."""
+    from .models import StageRun
+
+    run = StageRun(
+        workspace_id=conversation.workspace_id,
+        whatsapp_account_id=conversation.whatsapp_account_id,
+        conversation_id=conversation.id,
+        stage="outbound_actions",
+        input_snapshot="deterministic outbound action planner",
+        output_json=json.dumps(result, ensure_ascii=False),
+        status=str(result.get("send_result", {}).get("status") or "unknown"),
+    )
+    session.add(run)
+    session.flush()
+
+
+def _sendable_property_media(media_items: list[PropertyMedia]) -> tuple[list[PropertyMedia], list[str]]:
+    """Split media into sendable items and missing/invalid references."""
+    sendable: list[PropertyMedia] = []
+    missing: list[str] = []
+    for media in media_items:
+        descriptor = describe_media_storage(media)
+        if descriptor.sendable:
+            sendable.append(media)
+        else:
+            missing.append(descriptor.display_reference)
+    return sendable, missing
+
+
+def _refresh_supabase_media_urls(session: Session, media_items: list[PropertyMedia]) -> None:
+    """Refresh expired Supabase signed URLs so uploaded media remains sendable."""
+    refreshed = False
+    base_config = None
+    for media in media_items:
+        descriptor = describe_media_storage(media)
+        if descriptor.sendable or descriptor.provider != "supabase" or not descriptor.storage_object_path:
+            continue
+        if base_config is None:
+            base_config = supabase_storage_config_from_settings()
+        config = replace(base_config, bucket=descriptor.storage_bucket or base_config.bucket)
+        signed_url, expires_at = create_signed_url_for_supabase_object(descriptor.storage_object_path, config=config)
+        media.signed_url = signed_url
+        media.signed_url_expires_at = expires_at
+        refreshed = True
+    if refreshed:
+        session.flush()
+
+
+async def _send_action(
+    session: Session,
+    conversation: Conversation,
+    contact: Contact,
+    action: OutboundAction,
+) -> SentActionResult:
+    """Send one planned action immediately and append outbound message records."""
+    rendered_parts, media_items = _render_action_parts(session, conversation, action)
+    if not rendered_parts:
+        return SentActionResult("skipped", action.to_dict(), "empty_action_text")
+
+    if conversation.source != "fake_chat":
+        _refresh_supabase_media_urls(session, media_items)
+        _, missing_media = _sendable_property_media(media_items)
+        if missing_media:
+            return SentActionResult("blocked", action.to_dict(), "media_file_missing: " + ", ".join(missing_media))
+
+    bridge_base_url = bridge_base_url_for_conversation(session, conversation)
+    sent_at = datetime.now()
+    bridge_message_ids: list[str] = []
+    send_index = 0
+    media_sent = False
+
+    async def send_media_items() -> None:
+        nonlocal send_index, media_sent
+        if media_sent:
+            return
+        media_sent = True
+        for media in media_items:
+            send_index += 1
+            if conversation.source == "fake_chat":
+                bridge_message_id = f"fake-action-{conversation.id}-{action.stage}-media-{media.id}-{send_index}"
+            else:
+                bridge_message_id = await send_property_media_via_bridge(contact.chat_jid, media, bridge_base_url=bridge_base_url)
+            bridge_message_ids.append(bridge_message_id)
+            append_message(
+                session,
+                conversation,
+                contact.chat_jid,
+                bridge_message_id or f"sent-action-{conversation.id}-{action.stage}-media-{media.id}-{send_index}",
+                f"[{media.media_type}] {describe_media_storage(media).display_reference}",
+                int(sent_at.timestamp() * 1000) + send_index - 1,
+                "outbound",
+                conversation.source,
+                None,
+                f"action_media_{media.media_type}",
+            )
+
+    for part in rendered_parts:
+        if part.type == "delay":
+            if conversation.source != "fake_chat" and part.seconds > 0:
+                await asyncio.sleep(part.seconds)
+            continue
+        if part.type == "gallery":
+            await send_media_items()
+            continue
+
+        send_index += 1
+        if conversation.source == "fake_chat":
+            bridge_message_id = f"fake-action-{conversation.id}-{action.stage}-{send_index}"
+        else:
+            bridge_message_id = await send_via_bridge(contact.chat_jid, part.text, bridge_base_url=bridge_base_url)
+        bridge_message_ids.append(bridge_message_id)
+        append_message(
+            session,
+            conversation,
+            contact.chat_jid,
+            bridge_message_id or f"sent-action-{conversation.id}-{action.stage}-{send_index}",
+            part.text,
+            int(sent_at.timestamp() * 1000) + send_index - 1,
+            "outbound",
+            conversation.source,
+            None,
+            "action_send",
+        )
+
+    conversation.latest_outbound_at = sent_at
+    return SentActionResult("sent", action.to_dict(), "sent", bridge_message_ids)
+
+
+async def execute_outbound_action_plan(session: Session, conversation_id: int, pipeline_result: dict[str, Any]) -> dict[str, Any]:
+    """Plan and send outbound actions immediately."""
+    conversation = session.get(Conversation, conversation_id)
+    if not conversation:
+        return pipeline_result
+    actions = plan_outbound_actions(conversation, pipeline_result, session)
+    if actions:
+        pipeline_result["planned_actions"] = [action.to_dict() for action in actions]
+    needs_review_action = next((action for action in actions if action.action_type == "needs_review"), None)
+    if needs_review_action:
+        conversation.status = "needs_review"
+        conversation.current_stage = "needs_review"
+        pipeline_result["send_result"] = {
+            "status": "needs_review",
+            "reason": needs_review_action.reason,
+            "diagnostic": needs_review_action.diagnostic or {},
+        }
+        _record_outbound_action_audit(session, conversation, pipeline_result)
+        return pipeline_result
+    if not actions:
+        pipeline_result["send_result"] = {"status": "not_attempted", "reason": "no_planned_actions"}
+        _record_outbound_action_audit(session, conversation, pipeline_result)
+        return pipeline_result
+
+    if _auto_reply_already_sent(session, conversation):
+        pipeline_result["send_result"] = {"status": "skipped", "reason": "auto_reply_already_sent"}
+        _record_outbound_action_audit(session, conversation, pipeline_result)
+        return pipeline_result
+
+    block_reason = _send_block_reason(session, conversation)
+    if block_reason:
+        pipeline_result["send_result"] = {"status": "blocked", "reason": block_reason}
+        _record_outbound_action_audit(session, conversation, pipeline_result)
+        return pipeline_result
+
+    contact = session.get(Contact, conversation.contact_id)
+    if not contact:
+        pipeline_result["send_result"] = {"status": "blocked", "reason": "contact_not_found"}
+        _record_outbound_action_audit(session, conversation, pipeline_result)
+        return pipeline_result
+
+    results: list[dict[str, Any]] = []
+    for action in actions:
+        try:
+            result = await _send_action(session, conversation, contact, action)
+        except Exception as error:
+            result = SentActionResult(
+                "failed",
+                action.to_dict(),
+                f"{error.__class__.__name__}: {error}",
+            )
+        results.append(result.to_dict())
+        if result.status != "sent":
+            break
+
+    pipeline_result["sent_actions"] = results
+    pipeline_result["send_result"] = {
+        "status": "sent" if all(result["status"] == "sent" for result in results) else "partial",
+        "reason": "actions_executed",
+        "results": results,
+    }
+    _record_outbound_action_audit(session, conversation, pipeline_result)
+    return pipeline_result

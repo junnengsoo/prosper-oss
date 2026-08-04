@@ -1,0 +1,28 @@
+# Architecture
+
+Prosper is organized around a shared backend workflow with separate channel and presentation layers.
+
+## Components
+
+- `backend/app/pipeline.py` coordinates triage, property matching, qualification, and swinging stages.
+- `backend/app/models.py` stores workspaces, contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state.
+- `backend/app/schemas.py` defines the validated request and stage-result contracts.
+- `backend/app/actions.py` turns validated stage results into deterministic outbound actions.
+- `backend/app/services.py` owns message ingestion, deduplication, state checks, and bridge retries.
+- `frontend/` provides the inbox, configuration screens, audit views, and fake-chat simulator.
+- `bridge/` adapts Baileys WhatsApp events into the backend message contract and forwards outbound actions.
+- `backend/app/auth.py` protects the dashboard with a signed single-user session cookie; bridge requests use a separate bridge token.
+
+## Processing Flow
+
+1. A channel sends a normalized inbound message.
+2. The backend rejects unsupported, duplicate, stale, paused, or ignored work.
+3. A conversation is created or resumed.
+4. The current pipeline stage receives structured business context and prior conversation messages.
+5. The model result is parsed, validated, and recorded as a `StageRun`.
+6. A deterministic action planner decides whether a reply, media action, handoff, or no action is allowed.
+7. The selected channel executes the action and records the result.
+
+Dashboard requests authenticate through `/api/auth/login`, `/api/auth/session`, and `/api/auth/logout`. The cookie is only for the browser dashboard. It is not required for bridge callbacks, which use their own machine-to-machine headers.
+
+The model proposes structured facts and decisions. It does not directly send messages or mutate arbitrary application state.

@@ -1,0 +1,108 @@
+{
+  "property_list": [
+    {
+      "property_id": "RTF-001",
+      "property_name": "Harbour View Apartments",
+      "full_address": "Harbour View Apartments, Building A",
+      "property_url": "https://example.com/listings/rent-001",
+      "propertyguru_listing_id": "9000001"
+    },
+    {
+      "property_id": "RTF-002",
+      "property_name": "Maple Grove Residence",
+      "full_address": "Maple Grove Residence, Building B",
+      "property_url": "https://example.com/listings/rent-002",
+      "propertyguru_listing_id": "9000002"
+    },
+    {
+      "property_id": "SALE-001",
+      "property_name": "Oakline Towers",
+      "full_address": "Oakline Towers, Building C",
+      "property_url": "https://example.com/listings/sale-001",
+      "propertyguru_listing_id": "9000003"
+    },
+    {
+      "property_id": "SALE-002",
+      "property_name": "Northbank Residences",
+      "full_address": "Northbank Residences, Building D",
+      "property_url": "https://example.com/listings/sale-002",
+      "propertyguru_listing_id": "9000004"
+    },
+    {
+      "property_id": "RTF-003",
+      "property_name": "Riverside Lofts",
+      "full_address": "Riverside Lofts",
+      "property_url": "",
+      "propertyguru_listing_id": ""
+    },
+    {
+      "property_id": "SALE-003",
+      "property_name": "Riverside Lofts Sale Unit",
+      "full_address": "Riverside Lofts sale unit",
+      "property_url": "https://example.com/listings/sale-003",
+      "propertyguru_listing_id": "9000005"
+    }
+  ],
+  "cases": [
+    {
+      "id": "rental_url_match",
+      "message": "Hi, I am interested in Harbour View Apartments. Is this unit still available?",
+      "expected_match_status": "matched",
+      "expected_property_id": "RTF-001"
+    },
+    {
+      "id": "rental_name_match_with_profile",
+      "message": "Hi checking Maple Grove Residence. Budget 3400, four occupants, immediate move-in. Can view?",
+      "expected_match_status": "matched",
+      "expected_property_id": "RTF-002"
+    },
+    {
+      "id": "sale_name_match_oakline",
+      "message": "I saw your Oakline Towers sale listing. Can view this weekend?",
+      "expected_match_status": "matched",
+      "expected_property_id": "SALE-001"
+    },
+    {
+      "id": "sale_name_match_northbank",
+      "message": "Is Northbank Residences still available for sale?",
+      "expected_match_status": "matched",
+      "expected_property_id": "SALE-002"
+    },
+    {
+      "id": "sale_buyer_profile_present",
+      "message": "For the Oakline Towers sale unit, buyer budget is around 1.4m and can view Sunday.",
+      "expected_match_status": "matched",
+      "expected_property_id": "SALE-001"
+    },
+    {
+      "id": "sale_name_disambiguates_project",
+      "message": "Checking this Riverside Lofts sale unit. Can co-broke?",
+      "expected_match_status": "matched",
+      "expected_property_id": "SALE-003"
+    },
+    {
+      "id": "ambiguous_project_without_sale_or_rent",
+      "message": "Is Riverside Lofts still available?",
+      "expected_match_status": "ambiguous_multiple_matches",
+      "expected_property_id": ""
+    },
+    {
+      "id": "unmatched_specific_sale_property",
+      "message": "Is your Lakeside Plaza sale unit available for viewing?",
+      "expected_match_status": "unmatched_property",
+      "expected_property_id": ""
+    },
+    {
+      "id": "no_property_mentioned",
+      "message": "Do you have any two-bedroom apartments for sale near the city?",
+      "expected_match_status": "no_property_mentioned",
+      "expected_property_id": ""
+    },
+    {
+      "id": "listing_id_mismatch_does_not_fallback_to_name",
+      "message": "I am interested in Maple Grove Residence. Listing URL: https://example.com/listings/9999999",
+      "expected_match_status": "unmatched_property",
+      "expected_property_id": ""
+    }
+  ]
+}
