@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from .models import Property, PropertyPlaybook
 from .schemas import PlaybookBlock, PropertyPlaybookIn
 from .app_config import get_config_value
-from .tenant import apply_workspace_scope, current_workspace_scope, workspace_conditions
 
 
 PLAYBOOK_PLACEHOLDERS = {
@@ -21,19 +20,13 @@ PLAYBOOK_PLACEHOLDERS = {
     "property_name",
     "rent",
     "available_date",
-    "suggested_property_name",
-    "suggested_unit_info",
-    "suggested_tenant_notes",
-    "suggested_property_url",
     "property_guru_listing",
-    "swing_unit_url",
 }
 
 PLAYBOOK_BLOCK_FIELDS = (
     "initial_reply_blocks",
     "qualification_suitable_blocks",
     "qualification_not_suitable_blocks",
-    "swing_suggestion_blocks",
 )
 
 MAX_PLAYBOOK_DELAY_SECONDS = 30
@@ -77,27 +70,13 @@ STARTER_QUALIFICATION_NOT_SUITABLE_BLOCKS = [
     {"type": "message", "text": "Sorry, profile may not be suitable for this unit."},
 ]
 
-STARTER_SWING_SUGGESTION_BLOCKS = [
-    {
-        "type": "message",
-        "text": "Sorry this unit is not available.\n\nI have another unit nearby would you be keen? {swing_unit_url}",
-    },
-    {"type": "gallery", "mode": "enabled_property_gallery"},
-]
-
 LEGACY_INITIAL_REPLY_TEXTS = {
     "Hi, thanks for enquiring about {unit_info}. I'm the listing agent.",
     "Hi there! Thank you for inquiring about {unit_info}. I'm the listing agent.",
 }
 
-LEGACY_SWING_SUGGESTION_TEXTS = {
-    "This unit may no longer be available, but I can recommend this similar unit: {unit_info}",
-    "This unit may not be suitable, but I have another option that may work better: {unit_info}",
-}
-
 STOCK_GALLERY_CAPTIONS = {
     "Here are some photos of the unit.",
-    "Here are some photos of the alternative unit.",
 }
 
 
@@ -113,13 +92,7 @@ def playbook_blocks(value: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
 
 
 def get_property_playbook(session: Session, property_id: str) -> PropertyPlaybook | None:
-    scope = current_workspace_scope()
-    return session.scalar(
-        select(PropertyPlaybook).where(
-            *workspace_conditions(PropertyPlaybook, scope.workspace_id),
-            PropertyPlaybook.property_id == property_id,
-        )
-    )
+    return session.scalar(select(PropertyPlaybook).where(PropertyPlaybook.property_id == property_id))
 
 
 def ensure_starter_property_playbook(session: Session, property_id: str) -> PropertyPlaybook:
@@ -128,36 +101,25 @@ def ensure_starter_property_playbook(session: Session, property_id: str) -> Prop
     if existing:
         return existing
 
-    scope = current_workspace_scope()
     playbook = PropertyPlaybook(
         property_id=property_id,
         initial_reply_blocks=list(STARTER_INITIAL_REPLY_BLOCKS),
         qualification_suitable_blocks=list(STARTER_QUALIFICATION_SUITABLE_BLOCKS),
         qualification_not_suitable_blocks=list(STARTER_QUALIFICATION_NOT_SUITABLE_BLOCKS),
-        swing_suggestion_blocks=list(STARTER_SWING_SUGGESTION_BLOCKS),
         enabled=True,
     )
-    apply_workspace_scope(playbook, scope)
     session.add(playbook)
     session.flush()
     return playbook
 
 
 def list_property_playbooks(session: Session) -> list[PropertyPlaybook]:
-    scope = current_workspace_scope()
-    return list(
-        session.scalars(
-            select(PropertyPlaybook)
-            .where(*workspace_conditions(PropertyPlaybook, scope.workspace_id))
-            .order_by(PropertyPlaybook.property_id)
-        ).all()
-    )
+    return list(session.scalars(select(PropertyPlaybook).order_by(PropertyPlaybook.property_id)).all())
 
 
 def upsert_property_playbook(session: Session, property_id: str, payload: PropertyPlaybookIn) -> PropertyPlaybook:
     validate_playbook_payload(payload)
-    scope = current_workspace_scope()
-    property_ = session.scalar(select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == property_id))
+    property_ = session.scalar(select(Property).where(Property.property_id == property_id))
     if not property_:
         raise ValueError("Property not found")
 
@@ -173,7 +135,6 @@ def upsert_property_playbook(session: Session, property_id: str, payload: Proper
         return playbook
 
     playbook = PropertyPlaybook(property_id=property_id, **values)
-    apply_workspace_scope(playbook, scope)
     session.add(playbook)
     session.flush()
     return playbook
@@ -236,9 +197,8 @@ def render_playbook_blocks(
     blocks: list[dict[str, Any]],
     *,
     property_: Property | None = None,
-    suggested_property: Property | None = None,
 ) -> list[RenderedPlaybookPart]:
-    display_property = suggested_property or property_
+    display_property = property_
     tenant_notes = (display_property.tenant_facing_caveats if display_property else "").strip()
     context = {
         "unit_info": unit_info(display_property),
@@ -248,12 +208,7 @@ def render_playbook_blocks(
         "property_name": display_property.property_name if display_property else "",
         "rent": rent_text(display_property),
         "available_date": display_property.available_from if display_property and display_property.available_from else "",
-        "suggested_property_name": suggested_property.property_name if suggested_property else "",
-        "suggested_unit_info": unit_info(suggested_property),
-        "suggested_tenant_notes": (suggested_property.tenant_facing_caveats if suggested_property else "").strip(),
-        "suggested_property_url": suggested_property.property_url if suggested_property and suggested_property.property_url else "",
         "property_guru_listing": display_property.property_url if display_property and display_property.property_url else "",
-        "swing_unit_url": suggested_property.property_url if suggested_property and suggested_property.property_url else "",
     }
     rendered: list[RenderedPlaybookPart] = []
     for raw_block in blocks:
@@ -293,11 +248,6 @@ def normalize_legacy_stock_blocks(field_name: str, blocks: list[dict[str, Any]])
         has_legacy_gallery_caption = any(text == "Here are some photos of the unit." for text in texts)
         if texts and texts[0] in LEGACY_INITIAL_REPLY_TEXTS and (has_legacy_profile_prompt or has_legacy_gallery_caption):
             return list(STARTER_INITIAL_REPLY_BLOCKS)
-
-    if field_name == "swing_suggestion_blocks":
-        has_legacy_gallery_caption = any(text == "Here are some photos of the alternative unit." for text in texts)
-        if texts and texts[0] in LEGACY_SWING_SUGGESTION_TEXTS and has_legacy_gallery_caption:
-            return list(STARTER_SWING_SUGGESTION_BLOCKS)
 
     return strip_stock_gallery_caption_blocks(blocks)
 

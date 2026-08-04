@@ -77,7 +77,6 @@ class ConversationOut(BaseModel):
     current_stage: Optional[str]
     host_property_id: Optional[str]
     matched_property_id: Optional[str]
-    current_suggested_property_id: Optional[str]
     latest_message_text: Optional[str] = None
     latest_message_timestamp_ms: Optional[int] = None
     latest_message_direction: Optional[str] = None
@@ -90,7 +89,7 @@ class StartNewEnquiryRequest(BaseModel):
 
 
 class ConversationStageUpdate(BaseModel):
-    stage: Literal["unit_matching", "qualification", "swinging", "end"]
+    stage: Literal["unit_matching", "qualification", "end"]
     resume_contact: bool = True
 
 
@@ -221,7 +220,6 @@ class PropertyPlaybookIn(BaseModel):
     initial_reply_blocks: list[PlaybookBlock] = Field(default_factory=list)
     qualification_suitable_blocks: list[PlaybookBlock] = Field(default_factory=list)
     qualification_not_suitable_blocks: list[PlaybookBlock] = Field(default_factory=list)
-    swing_suggestion_blocks: list[PlaybookBlock] = Field(default_factory=list)
     enabled: bool = True
 
 
@@ -248,23 +246,6 @@ class PropertyExportOut(PropertyIn):
     id: int
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class SwingCandidateIn(BaseModel):
-    source_property_id: str
-    candidate_property_id: str
-    sort_order: int = 0
-    enabled: bool = True
-
-
-class SwingCandidateOut(SwingCandidateIn):
-    id: int
-    candidate_property_name: Optional[str] = None
-    candidate_property_status: Optional[str] = None
-    candidate_property_available: bool = False
-    validity_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -343,5 +324,4 @@ class ConfigExportOut(BaseModel):
     config: dict[str, str]
     properties: list[PropertyExportOut]
     property_media: list[PropertyMediaExportOut]
-    swing_candidates: list[SwingCandidateOut]
     playbooks: list[PropertyPlaybookOut] = Field(default_factory=list)

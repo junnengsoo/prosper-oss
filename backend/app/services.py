@@ -8,10 +8,9 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .media_storage import describe_media_storage
-from .models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun, SwingCandidate, WhatsappAccount
+from .models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from .normalize import extract_propertyguru_listing_id, is_configured_auto_greeting
-from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn, SwingCandidateIn
-from .tenant import WorkspaceScope, account_conditions, apply_workspace_scope, current_workspace_scope, workspace_conditions
+from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn
 from .app_config import get_config_value
 MESSAGE_BREAK_MARKER = "<message_break>"
 MEDIA_MARKER = "<media>"
@@ -51,10 +50,8 @@ def get_or_create_contact(
     chat_jid: str,
     display_name: str | None = None,
     phone: str | None = None,
-    scope: WorkspaceScope | None = None,
 ) -> Contact:
-    scope = scope or current_workspace_scope()
-    contact = session.scalar(select(Contact).where(*account_conditions(Contact, scope), Contact.chat_jid == chat_jid))
+    contact = session.scalar(select(Contact).where(Contact.chat_jid == chat_jid))
     if contact:
         if display_name and not contact.display_name:
             contact.display_name = display_name
@@ -63,7 +60,6 @@ def get_or_create_contact(
         return contact
 
     contact = Contact(chat_jid=chat_jid, display_name=display_name, phone=phone, status="active")
-    apply_workspace_scope(contact, scope)
     session.add(contact)
     session.flush()
     return contact
@@ -87,8 +83,6 @@ def get_or_create_active_conversation(session: Session, contact: Contact, source
         return conversation
 
     conversation = Conversation(
-        workspace_id=contact.workspace_id,
-        whatsapp_account_id=contact.whatsapp_account_id,
         contact_id=contact.id,
         source=source,
         status="active",
@@ -112,8 +106,6 @@ def start_new_enquiry(session: Session, conversation: Conversation) -> Conversat
     close_conversation(session, conversation)
     session.flush()
     next_conversation = Conversation(
-        workspace_id=conversation.workspace_id,
-        whatsapp_account_id=conversation.whatsapp_account_id,
         contact_id=contact.id,
         source=conversation.source,
         status="active",
@@ -158,16 +150,13 @@ def append_message(
     sender_jid: str | None = None,
     raw_type: str | None = None,
 ) -> Message:
-    scope = WorkspaceScope(conversation.workspace_id, conversation.whatsapp_account_id)
     existing = session.scalar(
-        select(Message).where(*account_conditions(Message, scope), Message.chat_jid == chat_jid, Message.message_id == message_id)
+        select(Message).where(Message.chat_jid == chat_jid, Message.message_id == message_id)
     )
     if existing:
         return existing
 
     message = Message(
-        workspace_id=conversation.workspace_id,
-        whatsapp_account_id=conversation.whatsapp_account_id,
         conversation_id=conversation.id,
         chat_jid=chat_jid,
         sender_jid=sender_jid,
@@ -185,12 +174,10 @@ def append_message(
     return message
 
 
-def stored_message_exists(session: Session, chat_jid: str, message_id: str, scope: WorkspaceScope | None = None) -> bool:
-    scope = scope or current_workspace_scope()
+def stored_message_exists(session: Session, chat_jid: str, message_id: str) -> bool:
     return (
         session.scalar(
             select(Message.id).where(
-                *account_conditions(Message, scope),
                 Message.chat_jid == chat_jid,
                 Message.message_id == message_id,
             )
@@ -219,9 +206,8 @@ def is_reset_command(text: str) -> bool:
 
 
 def handle_bridge_inbound(session: Session, payload: BridgeInboundMessage) -> tuple[bool, str, dict]:
-    scope = current_workspace_scope()
-    contact = get_or_create_contact(session, payload.chat_jid, payload.display_name, scope=scope)
-    if payload.from_me and stored_message_exists(session, payload.chat_jid, payload.message_id, scope):
+    contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
+    if payload.from_me and stored_message_exists(session, payload.chat_jid, payload.message_id):
         return True, "duplicate_from_me_ignored", {"contact_id": contact.id}
     contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms)
 
@@ -302,10 +288,9 @@ def handle_bridge_inbound(session: Session, payload: BridgeInboundMessage) -> tu
 
 
 def handle_fake_inbound(session: Session, payload: FakeInboundMessage) -> Message:
-    scope = current_workspace_scope()
     timestamp_ms = payload.timestamp_ms or now_ms()
     message_id = payload.message_id or f"fake-{timestamp_ms}"
-    contact = get_or_create_contact(session, payload.chat_jid, payload.display_name, scope=scope)
+    contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
     contact.last_message_at = timestamp_to_datetime(timestamp_ms)
     conversation = get_or_create_active_conversation(session, contact, "fake_chat")
     return append_message(
@@ -361,8 +346,7 @@ def reset_fake_chat_data(session: Session) -> dict[str, int]:
 
 
 def upsert_property(session: Session, payload: PropertyIn) -> Property:
-    scope = current_workspace_scope()
-    property_ = session.scalar(select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == payload.property_id))
+    property_ = session.scalar(select(Property).where(Property.property_id == payload.property_id))
     values = payload.model_dump()
     if not values.get("propertyguru_listing_id"):
         values["propertyguru_listing_id"] = extract_propertyguru_listing_id(values.get("property_url"))
@@ -372,14 +356,12 @@ def upsert_property(session: Session, payload: PropertyIn) -> Property:
         return property_
 
     property_ = Property(**values)
-    apply_workspace_scope(property_, scope)
     session.add(property_)
     session.flush()
     return property_
 
 
 def delete_properties(session: Session, property_ids: list[str]) -> dict[str, object]:
-    scope = current_workspace_scope()
     normalized_property_ids = list(dict.fromkeys(property_id.strip() for property_id in property_ids if property_id.strip()))
     if not normalized_property_ids:
         raise ValueError("At least one property ID is required")
@@ -387,7 +369,6 @@ def delete_properties(session: Session, property_ids: list[str]) -> dict[str, ob
     properties = list(
         session.scalars(
             select(Property).where(
-                *workspace_conditions(Property, scope.workspace_id),
                 Property.property_id.in_(normalized_property_ids),
             )
         ).all()
@@ -400,7 +381,6 @@ def delete_properties(session: Session, property_ids: list[str]) -> dict[str, ob
     media = list(
         session.scalars(
             select(PropertyMedia).where(
-                *workspace_conditions(PropertyMedia, scope.workspace_id),
                 PropertyMedia.property_id.in_(normalized_property_ids),
             )
         ).all()
@@ -408,22 +388,11 @@ def delete_properties(session: Session, property_ids: list[str]) -> dict[str, ob
     playbooks = list(
         session.scalars(
             select(PropertyPlaybook).where(
-                *workspace_conditions(PropertyPlaybook, scope.workspace_id),
                 PropertyPlaybook.property_id.in_(normalized_property_ids),
             )
         ).all()
     )
-    swing_candidates = list(
-        session.scalars(
-            select(SwingCandidate).where(
-                *workspace_conditions(SwingCandidate, scope.workspace_id),
-                (SwingCandidate.source_property_id.in_(normalized_property_ids))
-                | (SwingCandidate.candidate_property_id.in_(normalized_property_ids)),
-            )
-        ).all()
-    )
-
-    for item in [*media, *playbooks, *swing_candidates, *properties]:
+    for item in [*media, *playbooks, *properties]:
         session.delete(item)
     session.flush()
 
@@ -433,7 +402,6 @@ def delete_properties(session: Session, property_ids: list[str]) -> dict[str, ob
             "properties": len(properties),
             "media": len(media),
             "playbooks": len(playbooks),
-            "swing_candidates": len(swing_candidates),
         },
     }
 
@@ -443,22 +411,19 @@ def delete_property(session: Session, property_id: str) -> dict[str, object]:
 
 
 def list_property_media(session: Session, property_id: str, include_disabled: bool = False) -> list[PropertyMedia]:
-    scope = current_workspace_scope()
-    query = select(PropertyMedia).where(*workspace_conditions(PropertyMedia, scope.workspace_id), PropertyMedia.property_id == property_id)
+    query = select(PropertyMedia).where(PropertyMedia.property_id == property_id)
     if not include_disabled:
         query = query.where(PropertyMedia.enabled.is_(True))
     return list(session.scalars(query.order_by(PropertyMedia.sort_order, PropertyMedia.id)).all())
 
 
 def upsert_property_media(session: Session, property_id: str, payload: PropertyMediaIn) -> PropertyMedia:
-    scope = current_workspace_scope()
-    property_ = session.scalar(select(Property).where(*workspace_conditions(Property, scope.workspace_id), Property.property_id == property_id))
+    property_ = session.scalar(select(Property).where(Property.property_id == property_id))
     if not property_:
         raise ValueError("Property not found")
 
     media = session.scalar(
         select(PropertyMedia).where(
-            *workspace_conditions(PropertyMedia, scope.workspace_id),
             PropertyMedia.property_id == property_id,
             PropertyMedia.file_path == payload.file_path,
         )
@@ -470,7 +435,6 @@ def upsert_property_media(session: Session, property_id: str, payload: PropertyM
         return media
 
     media = PropertyMedia(property_id=property_id, **values)
-    apply_workspace_scope(media, scope)
     session.add(media)
     session.flush()
     return media
@@ -485,40 +449,8 @@ def delete_property_media(session: Session, media_id: int) -> PropertyMedia:
     return media
 
 
-def upsert_swing_candidate(session: Session, payload: SwingCandidateIn) -> SwingCandidate:
-    scope = current_workspace_scope()
-    candidate = session.scalar(
-        select(SwingCandidate).where(
-            *workspace_conditions(SwingCandidate, scope.workspace_id),
-            SwingCandidate.source_property_id == payload.source_property_id,
-            SwingCandidate.candidate_property_id == payload.candidate_property_id,
-        )
-    )
-    values = payload.model_dump()
-    if candidate:
-        for key, value in values.items():
-            setattr(candidate, key, value)
-        return candidate
-
-    candidate = SwingCandidate(**values)
-    apply_workspace_scope(candidate, scope)
-    session.add(candidate)
-    session.flush()
-    return candidate
-
-
-def delete_swing_candidate(session: Session, candidate_id: int) -> SwingCandidate:
-    candidate = session.get(SwingCandidate, candidate_id)
-    if not candidate:
-        raise ValueError("Swing candidate not found")
-    session.delete(candidate)
-    session.flush()
-    return candidate
-
-
 def get_all_config(session: Session) -> dict[str, str]:
-    scope = current_workspace_scope()
-    return {item.key: item.value for item in session.scalars(select(AppConfig).where(*workspace_conditions(AppConfig, scope.workspace_id))).all()}
+    return {item.key: item.value for item in session.scalars(select(AppConfig)).all()}
 
 
 def is_ai_paused(session: Session) -> bool:
@@ -549,22 +481,18 @@ def validate_config_update(values: dict[str, str]) -> dict[str, str]:
 
 
 def update_config(session: Session, values: dict[str, str]) -> dict[str, str]:
-    scope = current_workspace_scope()
     normalized_values = validate_config_update(values)
     for key, value in normalized_values.items():
-        item = session.scalar(select(AppConfig).where(*workspace_conditions(AppConfig, scope.workspace_id), AppConfig.key == key))
+        item = session.scalar(select(AppConfig).where(AppConfig.key == key))
         if item:
             item.value = value
         else:
-            session.add(apply_workspace_scope(AppConfig(key=key, value=value), scope))
+            session.add(AppConfig(key=key, value=value))
     session.flush()
     return get_all_config(session)
 
 
 def bridge_base_url_for_conversation(session: Session, conversation: Conversation) -> str:
-    account = session.get(WhatsappAccount, conversation.whatsapp_account_id)
-    if account and account.bridge_base_url:
-        return account.bridge_base_url
     return get_settings().bridge_base_url
 
 
