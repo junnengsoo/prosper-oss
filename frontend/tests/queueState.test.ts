@@ -22,7 +22,7 @@ const conversations: Conversation[] = [
     contact_id: 1,
     source: "whatsapp",
     status: "open",
-    current_stage: "qualification",
+    current_stage: "rental_listing_matching",
     matched_property_id: "RTF-023",
     latest_message_text: "Can view Rivervale this weekend?",
     latest_message_timestamp_ms: 1,
@@ -66,7 +66,6 @@ const properties: PropertyRecord[] = [
     full_address: "185D Rivervale Crescent",
     property_url: null,
     propertyguru_listing_id: "9000002",
-    landlord_profile_requirements: "Family",
     tenant_facing_caveats: "",
     created_at: "",
     updated_at: "",
@@ -85,7 +84,6 @@ const properties: PropertyRecord[] = [
     full_address: "625 Senja Road",
     property_url: null,
     propertyguru_listing_id: null,
-    landlord_profile_requirements: "No pets",
     tenant_facing_caveats: "",
     created_at: "",
     updated_at: "",
@@ -101,7 +99,7 @@ function conversation(overrides: Partial<Conversation>): Conversation {
     contact_id: 1,
     source: "whatsapp",
     status: "open",
-    current_stage: "qualification",
+    current_stage: "rental_listing_matching",
     matched_property_id: null,
     latest_message_text: null,
     latest_message_timestamp_ms: null,
@@ -116,12 +114,12 @@ assert(filterInboxRows(rows, "all", "rivervale", properties).length === 1, "sear
 assert(filterInboxRows(rows, "all", "weekend", properties).length === 1, "search should match latest message text");
 assert(filterInboxRows(rows, "all", "no-such-query", properties).length === 0, "search should exclude non-matching rows");
 
-assert(queueActionForConversation(conversation({ current_stage: "end" })).label === "Unit matched", "stage should not drive the simplified inbox label");
-assert(queueActionForConversation(conversation({ current_stage: "qualification" })).label === "Unit matched", "active AI stages should not be exposed in the simplified inbox");
+assert(queueActionForConversation(conversation({ current_stage: "end" })).label === "Listing matched", "stage should not drive the simplified inbox label");
+assert(queueActionForConversation(conversation({ current_stage: "rental_listing_matching" })).label === "Listing matched", "active AI stages should not be exposed in the simplified inbox");
 assert(queueActionForConversation(conversation({ status: "closed" })).label === "Closed", "closed conversations should be marked closed");
 assert(queueActionForConversation(conversation({}), { ...contacts[0], status: "paused" }).label === "Paused", "paused contact should override conversation stage");
 assert(queueActionForConversation(conversation({ current_stage: "end" })).tone === "success", "matched rows should use success tone");
-assert(queueActionForConversation(conversation({ current_stage: "qualification" })).tone === "success", "active AI stages should use the matched tone");
+assert(queueActionForConversation(conversation({ current_stage: "rental_listing_matching" })).tone === "success", "active AI stages should use the matched tone");
 assert(matchesQueueSearch(rows[0], "demo", properties), "search should match contact details");
 
 console.log("queueState tests passed");

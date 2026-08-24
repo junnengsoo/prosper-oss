@@ -9,14 +9,12 @@ from sqlalchemy.orm import Session
 
 from .database.models import Property, PropertyPlaybook
 from .schemas import PlaybookBlock, PropertyPlaybookIn
-from .app_config import get_config_value
 
 
 PLAYBOOK_PLACEHOLDERS = {
     "unit_info",
     "tenant_notes",
     "tenant_facing_caveats",
-    "profile_form",
     "property_name",
     "rent",
     "available_date",
@@ -25,8 +23,6 @@ PLAYBOOK_PLACEHOLDERS = {
 
 PLAYBOOK_BLOCK_FIELDS = (
     "initial_reply_blocks",
-    "qualification_suitable_blocks",
-    "qualification_not_suitable_blocks",
 )
 
 MAX_PLAYBOOK_DELAY_SECONDS = 30
@@ -39,45 +35,10 @@ STARTER_INITIAL_REPLY_BLOCKS = [
     {"type": "delay", "seconds": 0.5},
     {
         "type": "message",
-        "text": (
-            "To help me better serve you, could you kindly fill in the details below? 😊\n\n"
-            "姓名 Name\n"
-            "年龄 Age\n"
-            "预算 Budget\n"
-            "入住人数 No. of people staying\n"
-            "入住关系 Relationship between pax\n"
-            "性别 Gender\n"
-            "国籍 Nationality\n"
-            "种族 Race\n"
-            "职业 Occupation\n"
-            "工作准证类型 Type of Pass\n"
-            "准证过期日 Pass Expiry Date\n"
-            "入住日期 Move In Date\n"
-            "租赁期 Lease\n"
-            "是否需要家具 / Furnishing requirement (Fully / Partial / Unfurnished)\n"
-            "宠物 Any pet\n"
-            "抽烟 Smokes"
-        ),
+        "text": "Please share your preferred viewing time and move-in date, and I will check the next available slot.",
     },
     {"type": "gallery", "mode": "enabled_property_gallery"},
 ]
-
-STARTER_QUALIFICATION_SUITABLE_BLOCKS = [
-    {"type": "message", "text": "Thanks, let me check with the landlord and update you."},
-]
-
-STARTER_QUALIFICATION_NOT_SUITABLE_BLOCKS = [
-    {"type": "message", "text": "Sorry, profile may not be suitable for this unit."},
-]
-
-LEGACY_INITIAL_REPLY_TEXTS = {
-    "Hi, thanks for enquiring about {unit_info}. I'm the listing agent.",
-    "Hi there! Thank you for inquiring about {unit_info}. I'm the listing agent.",
-}
-
-STOCK_GALLERY_CAPTIONS = {
-    "Here are some photos of the unit.",
-}
 
 
 @dataclass(frozen=True)
@@ -104,8 +65,6 @@ def ensure_starter_property_playbook(session: Session, property_id: str) -> Prop
     playbook = PropertyPlaybook(
         property_id=property_id,
         initial_reply_blocks=list(STARTER_INITIAL_REPLY_BLOCKS),
-        qualification_suitable_blocks=list(STARTER_QUALIFICATION_SUITABLE_BLOCKS),
-        qualification_not_suitable_blocks=list(STARTER_QUALIFICATION_NOT_SUITABLE_BLOCKS),
         enabled=True,
     )
     session.add(playbook)
@@ -163,8 +122,6 @@ def validate_playbook_blocks(blocks: list[PlaybookBlock], field_name: str = "pla
             if block.mode != "enabled_property_gallery":
                 raise ValueError(f"{label}: gallery mode must be enabled_property_gallery")
             continue
-        if block.type == "profile_form":
-            continue
         raise ValueError(f"{label}: unsupported block type")
 
 
@@ -204,7 +161,6 @@ def render_playbook_blocks(
         "unit_info": unit_info(display_property),
         "tenant_notes": tenant_notes,
         "tenant_facing_caveats": tenant_notes,
-        "profile_form": get_config_value(session, "profile_form"),
         "property_name": display_property.property_name if display_property else "",
         "rent": rent_text(display_property),
         "available_date": display_property.available_from if display_property and display_property.available_from else "",
@@ -217,10 +173,6 @@ def render_playbook_blocks(
             text = (block.text or "").format(**context).strip()
             if text:
                 rendered.append(RenderedPlaybookPart("text", text=text))
-        elif block.type == "profile_form":
-            text = get_config_value(session, "profile_form").strip()
-            if text:
-                rendered.append(RenderedPlaybookPart("text", text=text))
         elif block.type == "delay":
             rendered.append(RenderedPlaybookPart("delay", seconds=float(block.seconds or 0)))
         elif block.type == "gallery":
@@ -228,32 +180,7 @@ def render_playbook_blocks(
     return rendered
 
 
-def _message_texts(blocks: list[dict[str, Any]]) -> list[str]:
-    return [str(block.get("text") or "").strip() for block in blocks if block.get("type") == "message"]
-
-
-def strip_stock_gallery_caption_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        block
-        for block in blocks
-        if not (block.get("type") == "message" and str(block.get("text") or "").strip() in STOCK_GALLERY_CAPTIONS)
-    ]
-
-
-def normalize_legacy_stock_blocks(field_name: str, blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Map old seeded MVP playbook copy to the current simplified send sequence."""
-    texts = _message_texts(blocks)
-    if field_name == "initial_reply_blocks":
-        has_legacy_profile_prompt = any("{profile_form}" in text for text in texts)
-        has_legacy_gallery_caption = any(text == "Here are some photos of the unit." for text in texts)
-        if texts and texts[0] in LEGACY_INITIAL_REPLY_TEXTS and (has_legacy_profile_prompt or has_legacy_gallery_caption):
-            return list(STARTER_INITIAL_REPLY_BLOCKS)
-
-    return strip_stock_gallery_caption_blocks(blocks)
-
-
 def enabled_blocks_for_stage(playbook: PropertyPlaybook | None, field_name: str) -> list[dict[str, Any]]:
     if not playbook or not playbook.enabled:
         return []
-    blocks = playbook_blocks(getattr(playbook, field_name, None))
-    return normalize_legacy_stock_blocks(field_name, blocks)
+    return playbook_blocks(getattr(playbook, field_name, None))

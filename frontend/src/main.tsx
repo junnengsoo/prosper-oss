@@ -58,19 +58,16 @@ import {
 } from "./viewState";
 import "./styles.css";
 
-type WorkflowKey = "initial_reply_blocks" | "qualification_suitable_blocks" | "qualification_not_suitable_blocks";
+type WorkflowKey = "initial_reply_blocks";
 type EditorSection = "facts" | "gallery" | "auto_replies";
 type AutoReplyField = "availableInitial";
 type AutoReplyWorkflowKey = "initial_reply_blocks";
-type ListingIntent = "rental" | "sale";
-type PropertyRequiredField = "property_name" | "status" | "property_type" | "property_url";
+type PropertyRequiredField = "property_name" | "status" | "property_url";
 
-const PROPERTY_REQUIRED_FIELDS: PropertyRequiredField[] = ["property_name", "status", "property_type", "property_url"];
+const PROPERTY_REQUIRED_FIELDS: PropertyRequiredField[] = ["property_name", "status", "property_url"];
 
 const WORKFLOWS: Array<{ key: WorkflowKey; label: string; help: string }> = [
-  { key: "initial_reply_blocks", label: "Initial Reply", help: "Sent after Prosper matches this listing." },
-  { key: "qualification_suitable_blocks", label: "Suitable", help: "Sent when the tenant profile is suitable." },
-  { key: "qualification_not_suitable_blocks", label: "Not Suitable", help: "Sent when the tenant profile is unsuitable." },
+  { key: "initial_reply_blocks", label: "Initial Reply", help: "Sent after Prosper matches this rental listing." },
 ];
 
 const EDITOR_SECTIONS: Array<{ key: EditorSection; label: string }> = [
@@ -86,41 +83,13 @@ const DEFAULT_AUTO_REPLIES: Record<AutoReplyField, string> = {
   availableInitial: "Hi, yes this unit is still available.",
 };
 
-const DEFAULT_SALE_AVAILABLE_MESSAGE = "Hi, yes this listing is still available for sale.";
-const DEFAULT_SALE_DETAILS_MESSAGE = "May I check your budget, financing status, and preferred viewing time?";
-
-const DEFAULT_PROFILE_DETAILS_MESSAGE = `To help me better serve you, could you kindly fill in the details below? 😊
-
-姓名 Name
-年龄 Age
-预算 Budget
-入住人数 No. of people staying
-入住关系 Relationship between pax
-性别 Gender
-国籍 Nationality
-种族 Race
-职业 Occupation
-工作准证类型 Type of Pass
-准证过期日 Pass Expiry Date
-入住日期 Move In Date
-租赁期 Lease
-是否需要家具 / Furnishing requirement (Fully / Partial / Unfurnished)
-宠物 Any pet
-抽烟 Smokes`;
+const DEFAULT_VIEWING_MESSAGE = "Please share your preferred viewing time and move-in date, and I will check the next available slot.";
 
 const DEFAULT_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[]> = {
   availableInitial: [
     { type: "message", text: DEFAULT_AUTO_REPLIES.availableInitial },
     { type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS },
-    { type: "message", text: DEFAULT_PROFILE_DETAILS_MESSAGE },
-  ],
-};
-
-const DEFAULT_SALE_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[]> = {
-  availableInitial: [
-    { type: "message", text: DEFAULT_SALE_AVAILABLE_MESSAGE },
-    { type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS },
-    { type: "message", text: DEFAULT_SALE_DETAILS_MESSAGE },
+    { type: "message", text: DEFAULT_VIEWING_MESSAGE },
   ],
 };
 
@@ -147,7 +116,6 @@ const EMPTY_PROPERTY_FORM: PropertyInput = {
   full_address: "",
   property_url: "",
   propertyguru_listing_id: "",
-  landlord_profile_requirements: "",
   tenant_facing_caveats: "",
 };
 
@@ -155,8 +123,6 @@ function emptyPlaybook(): PropertyPlaybookInput {
   return {
     enabled: false,
     initial_reply_blocks: [],
-    qualification_suitable_blocks: [],
-    qualification_not_suitable_blocks: [],
   };
 }
 
@@ -164,33 +130,16 @@ function playbookToInput(playbook: PropertyPlaybook | null | undefined): Propert
   return {
     enabled: playbook?.enabled ?? false,
     initial_reply_blocks: playbook?.initial_reply_blocks ?? [],
-    qualification_suitable_blocks: playbook?.qualification_suitable_blocks ?? [],
-    qualification_not_suitable_blocks: playbook?.qualification_not_suitable_blocks ?? [],
   };
 }
 
-function listingIntentFromValue(value: string | null | undefined): ListingIntent {
-  return String(value || "").trim().toLowerCase() === "sale" ? "sale" : "rental";
-}
-
-function listingIntentLabel(value: string | null | undefined): string {
-  return listingIntentFromValue(value) === "sale" ? "Sale" : "Rental";
-}
-
-function defaultAutoReplySequencesForIntent(intent: ListingIntent): Record<AutoReplyField, PlaybookBlock[]> {
-  return intent === "sale" ? DEFAULT_SALE_AUTO_REPLY_SEQUENCES : DEFAULT_AUTO_REPLY_SEQUENCES;
-}
-
-function defaultPlaybookInput(intent: ListingIntent = "rental"): PropertyPlaybookInput {
-  const sequences = defaultAutoReplySequencesForIntent(intent);
+function defaultPlaybookInput(): PropertyPlaybookInput {
   return {
     enabled: false,
     initial_reply_blocks: [
-      ...sequences.availableInitial,
+      ...DEFAULT_AUTO_REPLY_SEQUENCES.availableInitial,
       { type: "gallery", mode: "enabled_property_gallery" },
     ],
-    qualification_suitable_blocks: [],
-    qualification_not_suitable_blocks: [],
   };
 }
 
@@ -198,18 +147,16 @@ function hasWorkflowBlocks(input: PropertyPlaybookInput): boolean {
   return WORKFLOWS.some((workflow) => input[workflow.key].length > 0);
 }
 
-function effectivePlaybookInput(playbook: PropertyPlaybook | null | undefined, intent: ListingIntent = "rental"): PropertyPlaybookInput {
+function effectivePlaybookInput(playbook: PropertyPlaybook | null | undefined): PropertyPlaybookInput {
   const input = playbookToInput(playbook);
-  return playbook?.id || hasWorkflowBlocks(input) ? input : defaultPlaybookInput(intent);
+  return playbook?.id || hasWorkflowBlocks(input) ? input : defaultPlaybookInput();
 }
 
-function effectiveAutoReplyInput(playbook: PropertyPlaybook | null | undefined, intent: ListingIntent = "rental"): PropertyPlaybookInput {
-  const input = effectivePlaybookInput(playbook, intent);
+function effectiveAutoReplyInput(playbook: PropertyPlaybook | null | undefined): PropertyPlaybookInput {
+  const input = effectivePlaybookInput(playbook);
   return {
     enabled: input.enabled,
-    initial_reply_blocks: autoReplyWorkflowBlocks("availableInitial", input.initial_reply_blocks, intent),
-    qualification_suitable_blocks: [],
-    qualification_not_suitable_blocks: [],
+    initial_reply_blocks: autoReplyWorkflowBlocks("availableInitial", input.initial_reply_blocks),
   };
 }
 
@@ -219,26 +166,26 @@ function normalizeAutoReplyDefault(field: AutoReplyField, value: string): string
   return text;
 }
 
-function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReplyField, intent: ListingIntent = "rental"): PlaybookBlock[] {
+function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReplyField): PlaybookBlock[] {
   const editableBlocks = blocks.filter((block) => {
     if (block.type === "delay") return true;
     if (block.type !== "message") return false;
     return !STOCK_GALLERY_CAPTIONS.has((block.text || "").trim());
   });
-  return editableBlocks.length > 0 ? editableBlocks : defaultAutoReplySequencesForIntent(intent)[field];
+  return editableBlocks.length > 0 ? editableBlocks : DEFAULT_AUTO_REPLY_SEQUENCES[field];
 }
 
-function normalizeAutoReplyBlocks(field: AutoReplyField, blocks: PlaybookBlock[], intent: ListingIntent = "rental"): PlaybookBlock[] {
-  return compactAutoReplyBlocks(blocks, field, intent).map((block) => (
+function normalizeAutoReplyBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
+  return compactAutoReplyBlocks(blocks, field).map((block) => (
     block.type === "message"
       ? { ...block, text: normalizeAutoReplyDefault(field, block.text ?? "") }
       : block
   ));
 }
 
-function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[], intent: ListingIntent = "rental"): PlaybookBlock[] {
+function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
   return [
-    ...normalizeAutoReplyBlocks(field, blocks, intent),
+    ...normalizeAutoReplyBlocks(field, blocks),
     { type: "gallery", mode: "enabled_property_gallery" },
   ];
 }
@@ -247,23 +194,21 @@ function autoReplyWorkflowKey(field: AutoReplyField): AutoReplyWorkflowKey {
   return "initial_reply_blocks";
 }
 
-function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, intent: ListingIntent = "rental"): PlaybookBlock[] {
-  return compactAutoReplyBlocks(input[autoReplyWorkflowKey(field)], field, intent);
+function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField): PlaybookBlock[] {
+  return compactAutoReplyBlocks(input[autoReplyWorkflowKey(field)], field);
 }
 
-function playbookWithAutoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, blocks: PlaybookBlock[], intent: ListingIntent = "rental"): PropertyPlaybookInput {
+function playbookWithAutoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, blocks: PlaybookBlock[]): PropertyPlaybookInput {
   const key = autoReplyWorkflowKey(field);
   return {
     ...input,
-    [key]: [...compactAutoReplyBlocks(blocks, field, intent), { type: "gallery", mode: "enabled_property_gallery" } as PlaybookBlock],
-    qualification_suitable_blocks: [],
-    qualification_not_suitable_blocks: [],
+    [key]: [...compactAutoReplyBlocks(blocks, field), { type: "gallery", mode: "enabled_property_gallery" } as PlaybookBlock],
   };
 }
 
-function cleanAutoReplyBlocksForSave(blocks: PlaybookBlock[], field: AutoReplyField, intent: ListingIntent = "rental"): PlaybookBlock[] {
+function cleanAutoReplyBlocksForSave(blocks: PlaybookBlock[], field: AutoReplyField): PlaybookBlock[] {
   const cleaned: PlaybookBlock[] = [];
-  for (const block of compactAutoReplyBlocks(blocks, field, intent)) {
+  for (const block of compactAutoReplyBlocks(blocks, field)) {
     if (block.type === "message") {
       if (block.text?.trim()) cleaned.push({ type: "message", text: block.text });
       continue;
@@ -273,16 +218,14 @@ function cleanAutoReplyBlocksForSave(blocks: PlaybookBlock[], field: AutoReplyFi
     }
   }
   while (cleaned[cleaned.length - 1]?.type === "delay") cleaned.pop();
-  if (!cleaned.some((block) => block.type === "message")) cleaned.push(...defaultAutoReplySequencesForIntent(intent)[field]);
+  if (!cleaned.some((block) => block.type === "message")) cleaned.push(...DEFAULT_AUTO_REPLY_SEQUENCES[field]);
   return [...cleaned, { type: "gallery", mode: "enabled_property_gallery" }];
 }
 
-function cleanAutoRepliesForSave(input: PropertyPlaybookInput, intent: ListingIntent = "rental"): PropertyPlaybookInput {
+function cleanAutoRepliesForSave(input: PropertyPlaybookInput): PropertyPlaybookInput {
   return {
     enabled: input.enabled,
-    initial_reply_blocks: cleanAutoReplyBlocksForSave(input.initial_reply_blocks, "availableInitial", intent),
-    qualification_suitable_blocks: [],
-    qualification_not_suitable_blocks: [],
+    initial_reply_blocks: cleanAutoReplyBlocksForSave(input.initial_reply_blocks, "availableInitial"),
   };
 }
 
@@ -292,7 +235,7 @@ function propertyToInput(property: PropertyRecord | null | undefined): PropertyI
     property_id: property.property_id,
     property_name: property.property_name,
     status: property.status,
-    property_type: listingIntentFromValue(property.property_type),
+    property_type: "rental",
     bedrooms: property.bedrooms,
     bathrooms: property.bathrooms,
     asking_rent: property.asking_rent,
@@ -300,7 +243,6 @@ function propertyToInput(property: PropertyRecord | null | undefined): PropertyI
     full_address: property.full_address ?? "",
     property_url: property.property_url ?? "",
     propertyguru_listing_id: property.propertyguru_listing_id ?? "",
-    landlord_profile_requirements: property.landlord_profile_requirements ?? "",
     tenant_facing_caveats: property.tenant_facing_caveats ?? "",
   };
 }
@@ -386,7 +328,7 @@ function stageSummary(run?: StageRun | null): string {
   if (!run.output_json) return `${run.stage} completed.`;
   try {
     const parsed = JSON.parse(run.output_json) as Record<string, unknown>;
-    const direct = parsed.reason || parsed.summary || parsed.status || parsed.match_status || parsed.qualification_status;
+    const direct = parsed.reason || parsed.summary || parsed.status || parsed.match_status;
     return typeof direct === "string" ? direct : JSON.stringify(parsed).slice(0, 160);
   } catch {
     return run.output_json.slice(0, 160);
@@ -397,7 +339,7 @@ function blockLabel(block: PlaybookBlock): string {
   if (block.type === "message") return "Message";
   if (block.type === "delay") return "Delay";
   if (block.type === "gallery") return "Gallery";
-  return "Profile Form";
+  return "Gallery";
 }
 
 function blockCount(playbook?: PropertyPlaybook | null): number {
@@ -631,7 +573,6 @@ function App() {
 
   const selectedPlaybookProperty = selectedPlaybookPropertyId ? properties.find((property) => property.property_id === selectedPlaybookPropertyId) ?? null : null;
   const selectedPlaybookRecord = selectedPlaybookPropertyId ? playbooks.find((playbook) => playbook.property_id === selectedPlaybookPropertyId) ?? null : null;
-  const selectedPlaybookIntent = listingIntentFromValue(selectedPlaybookProperty?.property_type);
   const playbookDirty = JSON.stringify(playbookDraft) !== JSON.stringify(playbookBaseline);
 
   useEffect(() => {
@@ -640,13 +581,13 @@ function App() {
     void api
       .propertyPlaybook(selectedPlaybookPropertyId)
       .then((playbook) => {
-        const input = effectiveAutoReplyInput(playbook, selectedPlaybookIntent);
+        const input = effectiveAutoReplyInput(playbook);
         loadedPlaybookPropertyIdRef.current = selectedPlaybookPropertyId;
         setPlaybookDraft(input);
         setPlaybookBaseline(input);
       })
       .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
-  }, [authReady, playbookDirty, selectedPlaybookIntent, selectedPlaybookPropertyId]);
+  }, [authReady, playbookDirty, selectedPlaybookPropertyId]);
   function updatePropertyForm(patch: Partial<PropertyInput>) {
     setPropertyForm((current) => ({ ...current, ...patch }));
     const touchedKeys = PROPERTY_REQUIRED_FIELDS.filter((key) => Object.prototype.hasOwnProperty.call(patch, key));
@@ -745,8 +686,8 @@ function App() {
     setSelectedPlaybookPropertyId("");
     setPropertyForm({ ...EMPTY_PROPERTY_FORM });
     setPropertyFormErrors({});
-    setPlaybookDraft(defaultPlaybookInput("rental"));
-    setPlaybookBaseline(defaultPlaybookInput("rental"));
+    setPlaybookDraft(defaultPlaybookInput());
+    setPlaybookBaseline(defaultPlaybookInput());
     setEditorSection("facts");
     setActiveView("properties");
   }
@@ -760,7 +701,6 @@ function App() {
     const requiredFields = [
       ["property_name", propertyForm.property_name, "Property name"],
       ["status", propertyForm.status, "Status"],
-      ["property_type", propertyForm.property_type, "Listing type"],
       ["property_url", propertyForm.property_url, "Listing URL"],
     ] as const;
     const nextErrors: Partial<Record<PropertyRequiredField, string>> = {};
@@ -774,7 +714,7 @@ function App() {
     const payload = {
       ...propertyForm,
       property_id: propertyForm.property_id.trim() || generatedPropertyId(propertyForm.property_name, existingIds),
-      property_type: listingIntentFromValue(propertyForm.property_type),
+      property_type: "rental",
       propertyguru_listing_id: "",
     };
     const saved = await api.upsertProperty(payload);
@@ -794,7 +734,7 @@ function App() {
       try {
         const saved = await saveProperty();
         const playbook = await api.propertyPlaybook(saved.property_id).catch(() => null);
-        const input = effectiveAutoReplyInput(playbook, listingIntentFromValue(saved.property_type));
+        const input = effectiveAutoReplyInput(playbook);
         setPlaybookDraft(input);
         setPlaybookBaseline(input);
         setStatus("Listing facts saved");
@@ -858,17 +798,16 @@ function App() {
   async function savePlaybook() {
     if (!selectedPlaybookPropertyId) throw new Error("Choose a property");
     const saved = await api.upsertPropertyPlaybook(selectedPlaybookPropertyId, playbookDraft);
-    const input = effectivePlaybookInput(saved, listingIntentFromValue(selectedPlaybookProperty?.property_type));
+    const input = effectivePlaybookInput(saved);
     setPlaybookDraft(input);
     setPlaybookBaseline(input);
     await loadAll();
   }
 
   async function saveAutoRepliesForProperty(propertyId: string) {
-    const intent = listingIntentFromValue(propertyForm.property_type);
-    const payload = cleanAutoRepliesForSave(playbookDraft, intent);
+    const payload = cleanAutoRepliesForSave(playbookDraft);
     const saved = await api.upsertPropertyPlaybook(propertyId, payload);
-    const input = effectiveAutoReplyInput(saved, intent);
+    const input = effectiveAutoReplyInput(saved);
     setPlaybookDraft(input);
     setPlaybookBaseline(input);
     await loadAll();
@@ -1100,9 +1039,9 @@ function Sidebar({ activeView, setActiveView }: { activeView: AppView; setActive
           );
         })}
       </nav>
-      <div className="profileRail">
+      <div className="accountRail">
         <UserCircle size={24} />
-        <span>Profile</span>
+        <span>Account</span>
       </div>
     </aside>
   );
@@ -1296,7 +1235,7 @@ function InboxView({
               <button>Matched</button>
         </div>
         <div className="leadList">
-          {rows.length === 0 && <EmptyState title="No matched enquiries" body="Matched WhatsApp enquiries will appear here after unit matching." />}
+          {rows.length === 0 && <EmptyState title="No matched enquiries" body="Matched WhatsApp enquiries will appear here after rental listing matching." />}
           {rows.map((row) => {
             const property = row.conversation.matched_property_id ? properties.find((item) => item.property_id === row.conversation.matched_property_id) : null;
             const action = queueActionForConversation(row.conversation, row.contact);
@@ -1347,7 +1286,7 @@ function InboxView({
                 </div>
                 {onOpenProperty && <button onClick={onOpenProperty}>Edit</button>}
               </article>
-              <article className="qualificationCard">
+              <article className="auditCard">
                 <div className="cardTitle">
                   <span>Prosper Audit</span>
                   <b className={classNames("badge", statusTone(latestStageRun?.status))}>{latestStageRun?.status || "No run"}</b>
@@ -1452,7 +1391,7 @@ function PropertiesView({
                     </div>
                     <h2>{property.property_name}</h2>
                     <p>
-                      <span>{listingIntentLabel(property.property_type)}</span>
+                      <span>Rental</span>
                       <span><BedDouble size={15} /> {property.bedrooms ?? "-"} BR</span>
                       <span><Bath size={15} /> {property.bathrooms ?? "-"} Bath</span>
                     </p>
@@ -1568,12 +1507,6 @@ function PropertyEditorView({
                   <option value="draft">Draft</option>
                 </select>
               </Field>
-              <Field label="Listing type" required error={formErrors.property_type}>
-                <select value={listingIntentFromValue(form.property_type)} onChange={(event) => setForm({ property_type: event.target.value })}>
-                  <option value="rental">Rental</option>
-                  <option value="sale">Sale</option>
-                </select>
-              </Field>
               <Field label="Listing URL" required wide error={formErrors.property_url}><input value={form.property_url ?? ""} onChange={(event) => setForm({ property_url: event.target.value })} /></Field>
               <Field label="Rent"><input type="number" value={form.asking_rent ?? ""} onChange={(event) => setForm({ asking_rent: event.target.value ? Number(event.target.value) : null })} /></Field>
               <Field label="Available date"><input value={form.available_from ?? ""} onChange={(event) => setForm({ available_from: event.target.value })} /></Field>
@@ -1641,8 +1574,6 @@ function AutoRepliesEditor({
   config: Record<string, string>;
   disabled: boolean;
 }) {
-  const intent = listingIntentFromValue(property?.property_type);
-
   return (
     <section className="autoRepliesLayout">
       <div className="autoRepliesForm">
@@ -1672,10 +1603,9 @@ function AutoRepliesEditor({
           </header>
           <AutoReplySequence
             field="availableInitial"
-            blocks={autoReplyBlocks(draft, "availableInitial", intent)}
+            blocks={autoReplyBlocks(draft, "availableInitial")}
             setDraft={setDraft}
             disabled={disabled}
-            intent={intent}
           />
           <div className="mediaStepNote"><ImageIcon size={17} /> Prosper sends this unit's media after the reply.</div>
         </article>
@@ -1697,16 +1627,14 @@ function AutoReplySequence({
   blocks,
   setDraft,
   disabled,
-  intent,
 }: {
   field: AutoReplyField;
   blocks: PlaybookBlock[];
   setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
   disabled: boolean;
-  intent: ListingIntent;
 }) {
   function commit(nextBlocks: PlaybookBlock[]) {
-    setDraft((current) => playbookWithAutoReplyBlocks(current, field, nextBlocks, intent));
+    setDraft((current) => playbookWithAutoReplyBlocks(current, field, nextBlocks));
   }
 
   function updateBlock(index: number, patch: Partial<PlaybookBlock>) {
@@ -1728,7 +1656,7 @@ function AutoReplySequence({
 
   function removeBlock(index: number) {
     const nextBlocks = blocks.filter((_, blockIndex) => blockIndex !== index);
-    commit(nextBlocks.length > 0 ? nextBlocks : defaultAutoReplySequencesForIntent(intent)[field]);
+    commit(nextBlocks.length > 0 ? nextBlocks : DEFAULT_AUTO_REPLY_SEQUENCES[field]);
   }
 
   return (
@@ -2017,7 +1945,6 @@ function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecor
         <div className="phoneBubble inbound">Hi, I'm interested in {property?.property_name || "this unit"}. Is it still available?</div>
         {blocks.map((block, index) => {
           if (block.type === "delay") return <div key={index} className="delayPill">{block.seconds ?? 1}s delay</div>;
-          if (block.type === "profile_form") return null;
           if (block.type === "gallery") {
             return (
               <div key={index} className="phoneBubble outbound mediaBubble">

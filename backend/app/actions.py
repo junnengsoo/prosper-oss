@@ -25,7 +25,6 @@ from .services import (
     send_via_bridge,
     split_outbound_parts,
 )
-from .app_config import get_config_value
 
 
 @dataclass(frozen=True)
@@ -71,41 +70,21 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _unit_matching_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
-    """Extract unit-matching output from either direct or nested pipeline results."""
+def _listing_matching_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
+    """Extract rental listing matching output from either direct or nested pipeline results."""
     if "match_status" in pipeline_result:
         return pipeline_result
-    return _as_dict(pipeline_result.get("unit_matching"))
+    return _as_dict(pipeline_result.get("rental_listing_matching"))
 
 
-def _qualification_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
-    """Extract qualification output from direct or nested results."""
-    if "qualification_status" in pipeline_result:
-        return pipeline_result
-    qualification = _as_dict(pipeline_result.get("qualification"))
-    if "qualification_status" in qualification:
-        return qualification
-    return _as_dict(qualification.get("qualification"))
-
-
-def _profile_present(unit_matching: dict[str, Any]) -> bool:
-    """Check whether unit matching says the tenant profile was already provided."""
-    return str(unit_matching.get("profile_info_status") or "").strip().lower() == "profile_present"
-
-
-def _matched_property_id(unit_matching: dict[str, Any], conversation: Conversation) -> str | None:
-    """Resolve the property to use for unit-matching follow-up actions."""
-    matched = unit_matching.get("matched_properties") or []
+def _matched_property_id(listing_matching: dict[str, Any], conversation: Conversation) -> str | None:
+    """Resolve the property to use for listing follow-up actions."""
+    matched = listing_matching.get("matched_properties") or []
     if isinstance(matched, list) and len(matched) == 1 and isinstance(matched[0], dict):
         property_id = matched[0].get("property_id")
         if isinstance(property_id, str) and property_id:
             return property_id
     return conversation.matched_property_id
-
-
-def _matched_unit_unavailable(unit_matching: dict[str, Any], qualification: dict[str, Any]) -> bool:
-    """Detect when the current unit-matching result found an unavailable unit."""
-    return unit_matching.get("matched_property_status") == "unavailable" and not qualification
 
 
 def _property_for_conversation(session: Session, conversation: Conversation, property_id: str | None = None) -> Property | None:
@@ -140,50 +119,6 @@ def _playbook_action(
     return None
 
 
-def _qualification_message_action(
-    session: Session,
-    conversation: Conversation,
-    qualification: dict[str, Any],
-    *,
-    allow_not_match_reply: bool = True,
-) -> OutboundAction | None:
-    """Convert a qualification decision into a tenant-facing outbound action."""
-    status = qualification.get("qualification_status")
-    reason = str(qualification.get("reason") or "")
-    property_id = conversation.matched_property_id
-    if status == "match":
-        return _playbook_action(
-            session,
-            conversation,
-            stage="qualification",
-            field_name="qualification_suitable_blocks",
-            property_id=property_id,
-            reason=reason,
-        )
-    if status in {"incomplete", "clarify_fit"}:
-        message = str(qualification.get("message") or "").strip()
-        if not message:
-            return None
-        return OutboundAction(
-            action_type="send_message",
-            stage="qualification",
-            message=message,
-            reason=reason,
-        )
-    if status == "not_match":
-        if not allow_not_match_reply:
-            return None
-        return _playbook_action(
-            session,
-            conversation,
-            stage="qualification",
-            field_name="qualification_not_suitable_blocks",
-            property_id=property_id,
-            reason=reason,
-        )
-    return None
-
-
 def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str, Any], session: Session | None = None) -> list[OutboundAction]:
     """Plan deterministic outbound actions from AI stage outputs."""
     if session is None:
@@ -192,48 +127,22 @@ def plan_outbound_actions(conversation: Conversation, pipeline_result: dict[str,
         with SessionLocal() as transient_session:
             return plan_outbound_actions(conversation, pipeline_result, transient_session)
 
-    unit_matching = _unit_matching_result(pipeline_result)
-    qualification = _qualification_result(pipeline_result)
-    actions: list[OutboundAction] = []
+    listing_matching = _listing_matching_result(pipeline_result)
 
-    if unit_matching.get("match_status") == "matched" and not qualification:
-        property_id = _matched_property_id(unit_matching, conversation)
+    if listing_matching.get("match_status") == "matched":
+        property_id = _matched_property_id(listing_matching, conversation)
         if property_id:
             action = _playbook_action(
                 session,
                 conversation,
-                stage="unit_matching",
+                stage="rental_listing_matching",
                 field_name="initial_reply_blocks",
                 property_id=property_id,
-                reason=str(unit_matching.get("reason") or ""),
+                reason=str(listing_matching.get("reason") or ""),
             )
             return [action] if action else []
 
-    if qualification:
-        status = qualification.get("qualification_status")
-        if _profile_present(unit_matching) and status in {"match", "incomplete", "clarify_fit"}:
-            # Manual reruns can recreate this unit/media sequence because stage outputs are action-derived.
-            property_id = _matched_property_id(unit_matching, conversation)
-            if property_id:
-                action = _playbook_action(
-                    session,
-                    conversation,
-                    stage="unit_matching",
-                    field_name="initial_reply_blocks",
-                    property_id=property_id,
-                    reason=str(unit_matching.get("reason") or ""),
-                )
-                if action:
-                    actions.append(action)
-        if status == "not_match":
-            action = _qualification_message_action(session, conversation, qualification)
-            return [action] if action else []
-        action = _qualification_message_action(session, conversation, qualification)
-        if action:
-            actions.append(action)
-        return actions
-
-    return actions
+    return []
 
 
 def _latest_message_for_conversation(session: Session, conversation_id: int) -> Message | None:
@@ -249,8 +158,6 @@ def _render_action_text(session: Session, action: OutboundAction) -> str:
         return action.message.strip()
     if action.action_type == "send_playbook":
         return ""
-    if action.action_type == "send_profile_form":
-        return f"To help me better serve you, please fill this up:\n\n{get_config_value(session, 'profile_form')}".strip()
     return ""
 
 

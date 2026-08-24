@@ -19,16 +19,14 @@ export type FakeScenarioEvaluation = {
 
 export const FAKE_CHAT_SCENARIOS: FakeChatScenario[] = [
   {
-    id: "available_profile",
-    label: "Available unit + profile",
+    id: "available_listing",
+    label: "Available listing",
     displayName: "Demo Tenant",
     expectedRunStatus: "created_conversation",
-    expectedStage: "Unit matching or qualification",
-    expectedAction: "Availability and qualification follow-up based on the matched property.",
-    verify: "Confirm that Maple Grove Residence is matched and the structured profile is available for qualification.",
-    text: `Hi, is Maple Grove Residence available?
-
-We are 4 family members. Budget is 3400. We can move in immediately and need a one-year lease.`,
+    expectedStage: "End after rental listing matching",
+    expectedAction: "Availability reply based on the matched rental listing.",
+    verify: "Confirm that Maple Grove Residence is matched and no tenant screening details are collected.",
+    text: "Hi, is Maple Grove Residence available? Can we view this weekend?",
   },
   {
     id: "ambiguous_property",
@@ -36,8 +34,8 @@ We are 4 family members. Budget is 3400. We can move in immediately and need a o
     displayName: "Unspecified Tenant",
     expectedRunStatus: "created_conversation",
     expectedStage: "End or manual review",
-    expectedAction: "No confident outbound reply when the enquiry does not identify a property clearly.",
-    verify: "Confirm that Prosper preserves the enquiry for review instead of inventing a confident property match.",
+    expectedAction: "No confident outbound reply when the enquiry does not identify a listing clearly.",
+    verify: "Confirm that Prosper preserves the enquiry for review instead of inventing a confident listing match.",
     text: "Hi, do you have a suitable two-bedroom rental near the city? Budget is around 3000.",
   },
   {
@@ -51,14 +49,14 @@ We are 4 family members. Budget is 3400. We can move in immediately and need a o
     text: "Hi, is Riverside Lofts still available? We need two bedrooms and can move in immediately.",
   },
   {
-    id: "incomplete_profile",
-    label: "Incomplete profile",
-    displayName: "Follow-up Tenant",
-    expectedRunStatus: "created_conversation",
-    expectedStage: "Qualification after operator run",
-    expectedAction: "A focused follow-up asking only for missing qualification details.",
-    verify: "Run qualification and confirm that Prosper asks for missing fields instead of rejecting the enquiry.",
-    text: "Hi, is Maple Grove Residence available? We are a family of four and can move in soon.",
+    id: "purchase_not_rental",
+    label: "Purchase enquiry",
+    displayName: "Buyer Contact",
+    expectedRunStatus: "skipped",
+    expectedStage: "Skipped",
+    expectedAction: "No outbound action.",
+    verify: "Confirm that purchase interest is not treated as a rental enquiry.",
+    text: "Hi, I am looking to buy a two-bedroom apartment near the city.",
   },
   {
     id: "not_enquiry",
@@ -69,22 +67,6 @@ We are 4 family members. Budget is 3400. We can move in immediately and need a o
     expectedAction: "No outbound action.",
     verify: "Confirm that a generic acknowledgement does not create an actionable enquiry.",
     text: "Thanks, noted.",
-  },
-  {
-    id: "qualification_match",
-    label: "Qualification match",
-    displayName: "Qualified Tenant",
-    expectedRunStatus: "created_conversation",
-    expectedStage: "End after qualification",
-    expectedAction: "A match or viewing response based on the configured Playbook.",
-    verify: "Run qualification and inspect the structured stage result and outbound action.",
-    text: `Hi, Maple Grove Residence is the one I am asking about.
-
-Budget: 3400
-Occupants: 4 family members
-Move in: immediate
-Lease: 1 year
-No pets`,
   },
 ];
 

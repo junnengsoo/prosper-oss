@@ -3,12 +3,12 @@ from __future__ import annotations
 from .base import PromptTemplate
 
 
-UNIT_MATCHING_PROMPT = PromptTemplate(
-    stage="unit_matching",
-    system="You match Singapore property WhatsApp enquiries to configured property records. Return only valid JSON.",
-    user_template="""You are helping a Singapore property agent handle a new WhatsApp property enquiry.
+RENTAL_LISTING_MATCHING_PROMPT = PromptTemplate(
+    stage="rental_listing_matching",
+    system="You match Singapore rental WhatsApp enquiries to configured rental listing records. Return only valid JSON.",
+    user_template="""You are helping a Singapore rental agent handle a new WhatsApp rental enquiry.
 
-Your task is ONLY to match the enquiry to one property in the agent's property list.
+Your task is ONLY to match the enquiry to one rental listing in the agent's listing list.
 
 PROPERTY LIST:
 \"\"\"
@@ -27,7 +27,7 @@ Important:
 - Do not use no_property_mentioned if the enquiry includes a property name, address, or listing URL.
 - Match against all configured properties even if status is unavailable. Availability is handled after matching.
 - If enquiry includes a PropertyGuru listing URL and the extracted listing ID does not match any propertyguru_listing_id in PROPERTY LIST, return unmatched_property. Do not fall back to property_name or full_address unless the URL has no usable listing ID.
-- Do not extract or judge tenant/buyer profile information in this stage.
+- Do not extract or judge tenant profile information in this stage.
 - Return only valid JSON.
 
 JSON format:

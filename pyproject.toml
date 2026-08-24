@@ -1,7 +1,7 @@
 [project]
 name = "whatsapp-pa"
 version = "0.1.0"
-description = "WhatsApp PA MVP for Singapore rental agent inbound qualification."
+description = "WhatsApp PA MVP for Singapore rental agent inbound enquiries."
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115.0",

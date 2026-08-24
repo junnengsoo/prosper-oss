@@ -86,7 +86,7 @@ def get_or_create_active_conversation(session: Session, contact: Contact, source
         contact_id=contact.id,
         source=source,
         status="active",
-        current_stage="unit_matching",
+        current_stage="rental_listing_matching",
     )
     session.add(conversation)
     session.flush()
@@ -109,7 +109,7 @@ def start_new_enquiry(session: Session, conversation: Conversation) -> Conversat
         contact_id=contact.id,
         source=conversation.source,
         status="active",
-        current_stage="unit_matching",
+        current_stage="rental_listing_matching",
     )
     session.add(next_conversation)
     session.flush()
@@ -454,7 +454,7 @@ def is_ai_paused(session: Session) -> bool:
 
 
 BOOLEAN_CONFIG_KEYS = {"pause_ai", "send_lock"}
-REQUIRED_NONBLANK_CONFIG_KEYS = {"profile_form"}
+REQUIRED_NONBLANK_CONFIG_KEYS: set[str] = set()
 
 
 def validate_config_update(values: dict[str, str]) -> dict[str, str]:

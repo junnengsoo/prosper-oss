@@ -12,11 +12,7 @@ Processing is blocked when the global AI pause is enabled, a contact is paused o
 
 ## Model Failure
 
-Provider errors, invalid JSON, and invalid nested output shapes are recorded as failed stage runs. The system returns a review-safe result and does not send a model-generated reply.
-
-## Qualification Loop
-
-Qualification is a bounded conversational loop. Each model turn is validated into a typed result containing the tenant-facing message, extracted facts, missing fields, and qualification status. The loop records its turn count and hands off after five continuable turns instead of making another model call.
+Provider errors, invalid JSON, and invalid output shapes are recorded as failed stage runs. The system returns a review-safe result and does not send a model-generated reply.
 
 ## Outbound Safety
 

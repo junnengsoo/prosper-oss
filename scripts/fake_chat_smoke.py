@@ -19,13 +19,11 @@ class Scenario:
     display_name: str
     expected_run_status: str
     text: str
-    deep_actions: tuple[str, ...] = ()
-    expected_deep_stage: str | None = None
 
 
 SCENARIOS = [
     Scenario(
-        "available_profile",
+        "available_listing",
         "Available unit",
         "Demo Tenant",
         "created_conversation",
@@ -51,15 +49,6 @@ SCENARIOS = [
         "Existing Contact",
         "skipped",
         "Thanks, noted.",
-    ),
-    Scenario(
-        "qualification_match",
-        "Qualification candidate",
-        "Qualified Tenant",
-        "created_conversation",
-        "Hi, Maple Grove Residence is the one I am asking about. Budget 3400, four family members, immediate move-in, one-year lease, no pets.",
-        deep_actions=("qualification",),
-        expected_deep_stage="end",
     ),
 ]
 
@@ -91,7 +80,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--reset", action="store_true")
-    parser.add_argument("--deep", action="store_true")
     args = parser.parse_args()
 
     health = request_json(args.base_url, "GET", "/health")
@@ -122,14 +110,6 @@ def main() -> int:
             accepted_statuses.add("created_conversation")
         ok = actual_status in accepted_statuses
 
-        if args.deep and conversation_id is not None:
-            for action in scenario.deep_actions:
-                route = {"qualification": "run-qualification"}[action]
-                request_json(args.base_url, "POST", f"/api/conversations/{conversation_id}/{route}", {})
-            stage = conversation_stage(args.base_url, conversation_id)
-
-        if scenario.expected_deep_stage and args.deep:
-            ok = ok and stage == scenario.expected_deep_stage
         if not ok:
             mismatches += 1
 

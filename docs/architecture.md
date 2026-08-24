@@ -4,7 +4,7 @@ Prosper is organized around a shared backend workflow with separate channel and 
 
 ## Components
 
-- `backend/app/pipeline.py` coordinates triage, property matching, and qualification stages.
+- `backend/app/pipeline.py` coordinates triage and rental listing matching stages.
 - `backend/app/database/models.py` stores contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state in one application scope.
 - `backend/app/database/connection.py` owns the SQLAlchemy engine, sessions, and table creation; `backend/app/database/seed.py` owns demo data.
 - `backend/app/schemas.py` defines the validated request and stage-result contracts.
@@ -27,4 +27,4 @@ Prosper is organized around a shared backend workflow with separate channel and 
 
 Dashboard requests authenticate through `/api/auth/login`, `/api/auth/session`, and `/api/auth/logout`. The cookie is only for the browser dashboard. It is not required for bridge callbacks, which use their own machine-to-machine headers.
 
-The model proposes structured facts and decisions. Qualification may generate the next tenant-facing question, but the bounded loop validates and records it before the action layer sends it.
+The model proposes structured triage and listing-matching decisions. The action layer renders Playbook replies only from validated matching results.

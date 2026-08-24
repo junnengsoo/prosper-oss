@@ -1,0 +1,76 @@
+{
+  "property_list": [
+    {
+      "property_id": "RTF-001",
+      "property_name": "Harbour View Apartments",
+      "full_address": "Harbour View Apartments, Building A",
+      "property_url": "https://example.com/listings/rent-001",
+      "propertyguru_listing_id": "9000001"
+    },
+    {
+      "property_id": "RTF-002",
+      "property_name": "Maple Grove Residence",
+      "full_address": "Maple Grove Residence, Building B",
+      "property_url": "https://example.com/listings/rent-002",
+      "propertyguru_listing_id": "9000002"
+    },
+    {
+      "property_id": "RTF-003",
+      "property_name": "Riverside Lofts",
+      "full_address": "Riverside Lofts, Tower 1",
+      "property_url": "https://example.com/listings/rent-003",
+      "propertyguru_listing_id": "9000003"
+    },
+    {
+      "property_id": "RTF-004",
+      "property_name": "Riverside Lofts",
+      "full_address": "Riverside Lofts, Tower 2",
+      "property_url": "https://example.com/listings/rent-004",
+      "propertyguru_listing_id": "9000004"
+    }
+  ],
+  "cases": [
+    {
+      "id": "rental_url_match",
+      "message": "Hi, I am interested in Harbour View Apartments. Is this unit still available?",
+      "expected_match_status": "matched",
+      "expected_property_id": "RTF-001"
+    },
+    {
+      "id": "rental_name_match",
+      "message": "Hi checking Maple Grove Residence. Can view this weekend?",
+      "expected_match_status": "matched",
+      "expected_property_id": "RTF-002"
+    },
+    {
+      "id": "rental_listing_id_match",
+      "message": "I saw this rental listing: https://example.com/listings/rent-003. Is it available?",
+      "expected_match_status": "matched",
+      "expected_property_id": "RTF-003"
+    },
+    {
+      "id": "ambiguous_project_without_listing_id",
+      "message": "Is Riverside Lofts still available?",
+      "expected_match_status": "ambiguous_multiple_matches",
+      "expected_property_id": ""
+    },
+    {
+      "id": "unmatched_specific_rental_property",
+      "message": "Is your Lakeside Plaza rental unit available for viewing?",
+      "expected_match_status": "unmatched_property",
+      "expected_property_id": ""
+    },
+    {
+      "id": "no_property_mentioned",
+      "message": "Do you have any two-bedroom rentals near the city?",
+      "expected_match_status": "no_property_mentioned",
+      "expected_property_id": ""
+    },
+    {
+      "id": "listing_id_mismatch_does_not_fallback_to_name",
+      "message": "I am interested in Maple Grove Residence. Listing URL: https://example.com/listings/9999999",
+      "expected_match_status": "unmatched_property",
+      "expected_property_id": ""
+    }
+  ]
+}

@@ -107,7 +107,6 @@ class Property(TimestampMixin, Base):
     full_address: Mapped[Optional[str]] = mapped_column(Text)
     property_url: Mapped[Optional[str]] = mapped_column(Text)
     propertyguru_listing_id: Mapped[Optional[str]] = mapped_column(String, index=True)
-    landlord_profile_requirements: Mapped[str] = mapped_column(Text, default="", nullable=False)
     tenant_facing_caveats: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     media: Mapped[list["PropertyMedia"]] = relationship(
@@ -124,8 +123,6 @@ class PropertyPlaybook(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     property_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
     initial_reply_blocks: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
-    qualification_suitable_blocks: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
-    qualification_not_suitable_blocks: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 

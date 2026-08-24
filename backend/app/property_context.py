@@ -19,30 +19,13 @@ def render_property_facts(property_: Property) -> str:
 
 
 def render_property_context(property_: Property) -> str:
-    requirements = property_.landlord_profile_requirements.strip() or "None stated."
     caveats = property_.tenant_facing_caveats.strip() or "None stated."
     return "\n".join(
         [
             "PROPERTY FACTS:",
             render_property_facts(property_),
             "",
-            "LANDLORD / PROFILE REQUIREMENTS:",
-            requirements,
-            "",
             "TENANT-FACING CAVEATS:",
             caveats,
-        ]
-    )
-
-
-def render_qualification_property_context(property_: Property) -> str:
-    requirements = property_.landlord_profile_requirements.strip() or "None stated."
-    return "\n".join(
-        [
-            "PROPERTY FACTS:",
-            render_property_facts(property_),
-            "",
-            "LANDLORD / PROFILE REQUIREMENTS:",
-            requirements,
         ]
     )

@@ -57,5 +57,5 @@ export function queueActionForConversation(conversation: Conversation, contact?:
   if (contact?.status === "paused") return { label: "Paused", tone: "danger" };
   if (contact?.status === "ignored") return { label: "Ignored", tone: "danger" };
   if (conversation.status === "closed") return { label: "Closed", tone: "neutral" };
-  return { label: "Unit matched", tone: "success" };
+  return { label: "Listing matched", tone: "success" };
 }
