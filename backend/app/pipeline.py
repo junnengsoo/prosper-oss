@@ -2,18 +2,21 @@ import json
 import re
 from typing import Any, Callable, Awaitable
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .llm import LlmMessage, LlmNotConfiguredError, LlmProviderError, generate_json
 from .database.models import Contact, Conversation, Message, Property, StageRun
 from .prompts import get_prompt
+from .schemas import RentalListingMatchingOutputContract, TriageOutputContract
 from .services import is_ai_paused
 
 
 JsonGenerator = Callable[[list[LlmMessage]], Awaitable[dict[str, Any]]]
 INITIAL_STAGE = "rental_listing_matching"
 END_STAGE = "end"
+MANUAL_REVIEW_STAGE = "manual_review"
 
 
 def conversation_messages(session: Session, conversation_id: int) -> list[Message]:
@@ -163,9 +166,48 @@ def as_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def is_manual_review_result(result: dict[str, Any] | None) -> bool:
+    """Return whether a stage or pipeline result requires manual review."""
+    if not isinstance(result, dict):
+        return False
+    if result.get("stage_status") == MANUAL_REVIEW_STAGE or result.get("match_status") == MANUAL_REVIEW_STAGE:
+        return True
+    return any(is_manual_review_result(child) for child in result.values() if isinstance(child, dict))
+
+
+def mark_conversation_manual_review(
+    session: Session,
+    conversation: Conversation,
+    *,
+    source_stage: str,
+    reason: str,
+    output: dict[str, Any] | None = None,
+) -> None:
+    """Move a conversation to Manual Review and persist an inspectable decision."""
+    conversation.status = MANUAL_REVIEW_STAGE
+    conversation.current_stage = MANUAL_REVIEW_STAGE
+    output_payload = output or {"stage_status": MANUAL_REVIEW_STAGE, "reason": reason}
+    record_stage_run(
+        session,
+        conversation.id,
+        MANUAL_REVIEW_STAGE,
+        f"{source_stage} manual review routing decision",
+        {"source_stage": source_stage, **output_payload},
+        MANUAL_REVIEW_STAGE,
+        reason,
+    )
+
+
+def manual_review_stage_result(reason: str) -> dict[str, Any]:
+    """Build a consistent Manual Review stage result."""
+    return {"stage_status": MANUAL_REVIEW_STAGE, "reason": reason}
+
+
 def manual_review_result(result: dict[str, Any], reason: str) -> dict[str, Any]:
     """Convert a listing-matching result into a manual-review result with a clear reason."""
     updated = dict(result)
+    if "match_status" in updated and updated["match_status"] != MANUAL_REVIEW_STAGE:
+        updated["original_match_status"] = updated["match_status"]
     updated["match_status"] = "manual_review"
     updated["reason"] = reason
     return updated
@@ -182,7 +224,7 @@ async def run_triage_text(
     llm_messages = build_triage_messages(thread)
     input_snapshot = serialize_llm_messages(llm_messages) if persist_input_snapshot else "[redacted pre-conversation triage input]"
     try:
-        result = await run_llm_stage(
+        raw_result = await run_llm_stage(
             generator,
             llm_messages,
             stage="triage",
@@ -190,8 +232,24 @@ async def run_triage_text(
             metadata={"persist_input_snapshot": persist_input_snapshot},
         )
     except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, ValueError) as error:
-        record_stage_run(session, conversation_id, "triage", input_snapshot, None, "error", str(error))
-        return {"stage_status": "manual_review", "reason": str(error)}
+        result = manual_review_stage_result(str(error))
+        record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, str(error))
+        return result
+
+    try:
+        parsed = TriageOutputContract.model_validate(raw_result)
+    except ValidationError as error:
+        reason = f"Invalid triage output: {error}"
+        result = manual_review_stage_result(reason)
+        record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        return result
+
+    result = parsed.model_dump()
+    if parsed.confidence != "high":
+        reason = "Triage confidence is not high enough for automatic handling"
+        result = {"stage_status": MANUAL_REVIEW_STAGE, "reason": reason, "triage": result}
+        record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        return result
 
     record_stage_run(session, conversation_id, "triage", input_snapshot, result, "success")
     return result
@@ -220,7 +278,7 @@ async def run_rental_listing_matching(
     ]
     input_snapshot = serialize_llm_messages(llm_messages)
     try:
-        result = await run_llm_stage(
+        raw_result = await run_llm_stage(
             generator,
             llm_messages,
             stage="rental_listing_matching",
@@ -228,46 +286,59 @@ async def run_rental_listing_matching(
             metadata={"available_property_count": property_jsonl.count("\n") + 1 if property_jsonl else 0},
         )
     except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, ValueError) as error:
-        conversation.current_stage = END_STAGE
-        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, None, "error", str(error))
-        return {"match_status": "manual_review", "reason": str(error)}
-
-    record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, "success")
-    if result.get("match_status") != "matched":
-        conversation.current_stage = END_STAGE
+        result = manual_review_result({}, str(error))
+        mark_conversation_manual_review(session, conversation, source_stage="rental_listing_matching", reason=str(error), output=result)
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, MANUAL_REVIEW_STAGE, str(error))
         return result
 
-    matched_properties = result.get("matched_properties") or []
-    if not isinstance(matched_properties, list) or len(matched_properties) != 1:
-        conversation.current_stage = END_STAGE
-        return manual_review_result(result, "Expected exactly one matched property")
+    try:
+        parsed = RentalListingMatchingOutputContract.model_validate(raw_result)
+    except ValidationError as error:
+        reason = f"Invalid rental listing matching output: {error}"
+        result = manual_review_result({}, reason)
+        mark_conversation_manual_review(session, conversation, source_stage="rental_listing_matching", reason=reason, output=result)
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        return result
 
-    matched_property = as_dict(matched_properties[0])
-    if not matched_property:
-        conversation.current_stage = END_STAGE
-        return manual_review_result(result, "Matched property must be an object")
+    result = parsed.model_dump()
+    if result.get("match_status") != "matched":
+        reason = f"Rental listing matching returned {result['match_status']}"
+        result = manual_review_result(result, reason)
+        mark_conversation_manual_review(session, conversation, source_stage="rental_listing_matching", reason=reason, output=result)
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        return result
 
+    matched_property = result["matched_properties"][0]
     property_id = matched_property.get("property_id")
-    if not property_id:
-        conversation.current_stage = END_STAGE
-        return manual_review_result(result, "Matched property is missing property_id")
 
     property_ = session.scalar(select(Property).where(Property.property_id == property_id))
     if not property_:
-        conversation.current_stage = END_STAGE
-        return manual_review_result(result, "Matched property is not configured in SQLite")
+        reason = "Matched property is not configured in SQLite"
+        result = manual_review_result(result, reason)
+        mark_conversation_manual_review(session, conversation, source_stage="rental_listing_matching", reason=reason, output=result)
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        return result
     if property_.status == "unknown":
-        conversation.current_stage = END_STAGE
-        return manual_review_result(result, "Matched property availability is unknown in SQLite")
+        conversation.matched_property_id = property_.property_id
+        reason = "Matched property availability is unknown in SQLite"
+        result = manual_review_result(result, reason)
+        result["matched_property_status"] = property_.status
+        mark_conversation_manual_review(session, conversation, source_stage="rental_listing_matching", reason=reason, output=result)
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        return result
 
     conversation.matched_property_id = property_.property_id
     result["matched_property_status"] = property_.status
     if property_.status == "unavailable":
-        conversation.current_stage = END_STAGE
+        reason = "Matched rental listing is unavailable"
+        result = manual_review_result(result, reason)
+        mark_conversation_manual_review(session, conversation, source_stage="rental_listing_matching", reason=reason, output=result)
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
         return result
 
     result["available_sequence_required"] = True
     conversation.current_stage = END_STAGE
+    record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, "success")
     return result
 
 

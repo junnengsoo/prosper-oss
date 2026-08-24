@@ -57,6 +57,8 @@ from .schemas import (
 from .actions import execute_outbound_action_plan, plan_outbound_actions
 from .llm import flush_langfuse
 from .pipeline import (
+    is_manual_review_result,
+    mark_conversation_manual_review,
     route_stored_conversation_after_inbound,
     run_initial_enquiry_pipeline,
     run_rental_listing_matching,
@@ -168,6 +170,19 @@ def triage_is_initial_enquiry(triage: dict[str, Any] | None) -> bool:
     if not isinstance(triage, dict):
         return False
     return triage.get("is_initial_rental_enquiry") is True
+
+
+def route_triage_manual_review(session: Session, conversation: Conversation | None, triage: dict[str, Any]) -> dict[str, Any]:
+    """Persist Manual Review routing for invalid or uncertain triage output."""
+    if conversation:
+        mark_conversation_manual_review(
+            session,
+            conversation,
+            source_stage="triage",
+            reason=str(triage.get("reason") or "triage manual review"),
+            output=triage,
+        )
+    return {"triage": triage}
 
 
 async def attach_outbound_action_result(session: Session, result: dict, conversation_id: int | None = None) -> dict:
@@ -902,6 +917,8 @@ async def fake_inbound_and_run(
         if conversation:
             conversation.current_stage = "rental_listing_matching"
         result = {"triage": triage, **await run_rental_listing_matching_pipeline(session, message.conversation_id)}
+    elif "triage" in locals() and is_manual_review_result(triage):
+        result = route_triage_manual_review(session, session.get(Conversation, message.conversation_id), triage)
     else:
         result = await route_stored_conversation_after_inbound(session, message.conversation_id)
     result = await attach_outbound_action_result(session, result, message.conversation_id)
@@ -1004,6 +1021,8 @@ async def bridge_inbound(
             if conversation:
                 conversation.current_stage = "rental_listing_matching"
             result = {"triage": triage, **await run_rental_listing_matching_pipeline(session, int(data["conversation_id"]))}
+        elif "triage" in locals() and is_manual_review_result(triage):
+            result = route_triage_manual_review(session, session.get(Conversation, int(data["conversation_id"])), triage)
         else:
             result = await route_stored_conversation_after_inbound(session, int(data["conversation_id"]))
         result = await attach_outbound_action_result(session, result, int(data["conversation_id"]))
@@ -1074,6 +1093,8 @@ async def bridge_inbound_batch(
                     "triage": pretriage_result,
                     **await run_rental_listing_matching_pipeline(session, pipeline_conversation_id),
                 }
+            elif pretriage_result and is_manual_review_result(pretriage_result):
+                pipeline_result = route_triage_manual_review(session, conversation, pretriage_result)
             else:
                 pipeline_result = await route_stored_conversation_after_inbound(session, pipeline_conversation_id)
             if pipeline_result:

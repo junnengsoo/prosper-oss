@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 ContactStatus = Literal["active", "paused", "ignored"]
-ConversationStatus = Literal["active", "paused", "handover", "closed"]
+ConversationStatus = Literal["active", "paused", "handover", "closed", "manual_review"]
 MessageDirection = Literal["inbound", "outbound", "human"]
 MessageSource = Literal["whatsapp", "fake_chat"]
 MediaType = Literal["photo", "video"]
@@ -64,6 +64,37 @@ class ConversationStageUpdate(BaseModel):
     stage: Literal["rental_listing_matching", "end"]
     resume_contact: bool = True
     model_config = {"extra": "forbid"}
+
+
+class TriageOutputContract(BaseModel):
+    is_initial_rental_enquiry: bool
+    confidence: Literal["high", "medium", "low"]
+    reason: str = ""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class RentalListingMatchedPropertyContract(BaseModel):
+    property_id: str = Field(min_length=1)
+    property_name: str = ""
+    reason: str = ""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class RentalListingMatchingOutputContract(BaseModel):
+    match_status: Literal["matched", "no_property_mentioned", "unmatched_property", "ambiguous_multiple_matches"]
+    mentioned_property_raw: str = ""
+    mentioned_listing_url: str = ""
+    extracted_listing_id: str = ""
+    matched_by: Literal["propertyguru_listing_id", "property_name", "full_address", "none"] = "none"
+    matched_properties: list[RentalListingMatchedPropertyContract] = Field(default_factory=list)
+    reason: str = ""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    @model_validator(mode="after")
+    def matched_status_requires_exactly_one_property(self) -> "RentalListingMatchingOutputContract":
+        if self.match_status == "matched" and len(self.matched_properties) != 1:
+            raise ValueError("matched output must include exactly one matched property")
+        return self
 
 
 class MessageOut(BaseModel):

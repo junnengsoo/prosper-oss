@@ -295,6 +295,25 @@ function statusTone(value?: string | null): "success" | "warning" | "danger" | "
   return "neutral";
 }
 
+function statusLabel(value?: string | null): string {
+  if (!value) return "No run";
+  if (value === "manual_review") return "Manual Review";
+  return value.replace(/_/g, " ");
+}
+
+function manualReviewReason(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (record.stage_status === "manual_review" || record.match_status === "manual_review") {
+    return typeof record.reason === "string" ? record.reason : "Review before replying.";
+  }
+  for (const child of Object.values(record)) {
+    const reason = manualReviewReason(child);
+    if (reason) return reason;
+  }
+  return null;
+}
+
 function propertyAvailabilityLabel(status?: string | null): string {
   return status === "available" ? "Available" : "Not available";
 }
@@ -328,6 +347,10 @@ function stageSummary(run?: StageRun | null): string {
   if (!run.output_json) return `${run.stage} completed.`;
   try {
     const parsed = JSON.parse(run.output_json) as Record<string, unknown>;
+    const reason = manualReviewReason(parsed);
+    if (reason) {
+      return `Manual Review: ${reason}`;
+    }
     const direct = parsed.reason || parsed.summary || parsed.status || parsed.match_status;
     return typeof direct === "string" ? direct : JSON.stringify(parsed).slice(0, 160);
   } catch {
@@ -1252,7 +1275,8 @@ function InboxView({
                 <p>{truncate(row.conversation.latest_message_text, 72) || "No latest message"}</p>
                 <div className="leadProperty">
                   <Building2 size={14} />
-                  <span>{property?.property_name || row.conversation.matched_property_id}</span>
+                  <span>{property?.property_name || row.conversation.matched_property_id || action.label}</span>
+                  <b className={classNames("badge", action.tone)}>{action.label}</b>
                   <i className={classNames("dot", action.tone)} />
                 </div>
               </button>
@@ -1289,7 +1313,7 @@ function InboxView({
               <article className="auditCard">
                 <div className="cardTitle">
                   <span>Prosper Audit</span>
-                  <b className={classNames("badge", statusTone(latestStageRun?.status))}>{latestStageRun?.status || "No run"}</b>
+                  <b className={classNames("badge", statusTone(latestStageRun?.status))}>{statusLabel(latestStageRun?.status)}</b>
                 </div>
                 <p>{stageSummary(latestStageRun)}</p>
                 <details>
@@ -1298,7 +1322,7 @@ function InboxView({
                     {selectedStageRuns.map((run) => (
                       <div key={run.id}>
                         <strong>{run.stage}</strong>
-                        <span>{run.status} · {formatDateTime(run.created_at)}</span>
+                        <span>{statusLabel(run.status)} · {formatDateTime(run.created_at)}</span>
                       </div>
                     ))}
                   </div>

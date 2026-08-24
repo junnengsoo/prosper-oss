@@ -77,6 +77,28 @@ def _listing_matching_result(pipeline_result: dict[str, Any]) -> dict[str, Any]:
     return _as_dict(pipeline_result.get("rental_listing_matching"))
 
 
+def _requires_manual_review(value: Any) -> bool:
+    """Return whether a pipeline result contains a Manual Review decision."""
+    if not isinstance(value, dict):
+        return False
+    if value.get("stage_status") == "manual_review" or value.get("match_status") == "manual_review":
+        return True
+    return any(_requires_manual_review(child) for child in value.values() if isinstance(child, dict))
+
+
+def _manual_review_reason(value: Any) -> str:
+    """Find the first Manual Review reason in a nested pipeline result."""
+    if not isinstance(value, dict):
+        return "manual_review"
+    if value.get("stage_status") == "manual_review" or value.get("match_status") == "manual_review":
+        return str(value.get("reason") or "manual_review")
+    for child in value.values():
+        reason = _manual_review_reason(child)
+        if reason != "manual_review":
+            return reason
+    return "manual_review"
+
+
 def _matched_property_id(listing_matching: dict[str, Any], conversation: Conversation) -> str | None:
     """Resolve the property to use for listing follow-up actions."""
     matched = listing_matching.get("matched_properties") or []
@@ -335,6 +357,13 @@ async def execute_outbound_action_plan(session: Session, conversation_id: int, p
     """Plan and send outbound actions immediately."""
     conversation = session.get(Conversation, conversation_id)
     if not conversation:
+        return pipeline_result
+    if _requires_manual_review(pipeline_result) or conversation.current_stage == "manual_review" or conversation.status == "manual_review":
+        reason = _manual_review_reason(pipeline_result)
+        conversation.status = "manual_review"
+        conversation.current_stage = "manual_review"
+        pipeline_result["send_result"] = {"status": "manual_review", "reason": reason}
+        _record_outbound_action_audit(session, conversation, pipeline_result)
         return pipeline_result
     actions = plan_outbound_actions(conversation, pipeline_result, session)
     if actions:
