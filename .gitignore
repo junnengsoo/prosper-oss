@@ -9,3 +9,5 @@ runtime/
 node_modules/
 dist/
 *.egg-info/
+frontend/playwright-report/
+frontend/test-results/

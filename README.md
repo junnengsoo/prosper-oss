@@ -79,6 +79,7 @@ The repository includes:
 - backend unit and integration tests
 - frontend state and authentication tests
 - bridge normalization, forwarding, retry, and pairing tests
+- browser-driven full-stack dashboard acceptance tests
 - prompt contract checks
 - sanitized triage and rental-listing-matching cases
 - a fake-chat smoke helper for testing the running application
@@ -154,6 +155,12 @@ With the backend running, exercise the seeded fake-chat scenarios:
 
 ```bash
 scripts/fake_chat_smoke.sh --reset
+```
+
+Run the browser acceptance suite with deterministic DeepSeek-compatible responses and local backend/frontend services:
+
+```bash
+scripts/acceptance.sh
 ```
 
 Live model evaluations require the configured provider:

@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
     "test": "node tests/run-tests.mjs",
+    "test:acceptance": "playwright test -c playwright.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,9 +20,10 @@
     "typescript": "^5.7.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@vitejs/plugin-react": "^6.0.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
-    "@vitejs/plugin-react": "^6.0.2",
     "tsx": "^4.23.12",
     "vite": "^8.0.16"
   }
