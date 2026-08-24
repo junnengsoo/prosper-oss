@@ -297,7 +297,6 @@ export const api = {
   properties: () => request<PropertyRecord[]>("/api/properties"),
   propertyMedia: (propertyId: string, includeDisabled = false) =>
     request<PropertyMedia[]>(`/api/properties/${encodeURIComponent(propertyId)}/media?include_disabled=${includeDisabled ? "true" : "false"}`),
-  playbooks: () => request<PropertyPlaybook[]>("/api/playbooks"),
   propertyPlaybook: (propertyId: string) => request<PropertyPlaybook>(`/api/properties/${encodeURIComponent(propertyId)}/playbook`),
   upsertPropertyPlaybook: (propertyId: string, playbook: PropertyPlaybookInput) =>
     request<PropertyPlaybook>(`/api/properties/${encodeURIComponent(propertyId)}/playbook`, {

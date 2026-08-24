@@ -76,6 +76,34 @@ def test_single_user_cookie_auth_flow(session, monkeypatch):
 
 
 @pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/"),
+        ("GET", "/demo/conversations/1"),
+        ("POST", "/demo/conversations/1/close"),
+        ("POST", "/demo/contacts/1/unpause"),
+        ("GET", "/api/playbooks"),
+    ],
+)
+def test_removed_operator_surfaces_are_not_routed(session, monkeypatch, method, path):
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
+    get_settings.cache_clear()
+
+    def override_session():
+        yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        client = TestClient(app)
+
+        response = client.request(method, path)
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+        get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
     ("path", "method", "body"),
     [
         ("/api/bridge/chat-state?chat_jid=tenant@s.whatsapp.net", "GET", None),

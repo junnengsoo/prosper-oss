@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -69,7 +69,6 @@ from .playbooks import (
     upsert_property_playbook,
 )
 from .database.seed import seed_all
-from .status_page import render_demo_conversation, render_demo_overview
 from .media_storage import delete_stored_file, describe_media_storage, media_content_type, store_uploaded_file
 from .services import (
     append_message,
@@ -269,54 +268,6 @@ def logout(response: Response) -> AuthSessionOut:
     return AuthSessionOut(authenticated=False)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def demo_overview_page(
-    session: Session = Depends(get_session),
-    _context: RequestContext = DashboardContext,
-) -> HTMLResponse:
-    runtime = await runtime_status(session)
-    return HTMLResponse(await render_demo_overview(session, runtime))
-
-
-@app.get("/demo/conversations/{conversation_id}", response_class=HTMLResponse)
-async def demo_conversation_page(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    _context: RequestContext = DashboardContext,
-) -> HTMLResponse:
-    runtime = await runtime_status(session)
-    return HTMLResponse(await render_demo_conversation(session, runtime, conversation_id))
-
-
-@app.post("/demo/conversations/{conversation_id}/close")
-def demo_close_conversation(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    _context: RequestContext = DashboardContext,
-) -> RedirectResponse:
-    conversation = session.get(Conversation, conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    close_conversation(session, conversation)
-    session.commit()
-    return RedirectResponse(url="/", status_code=303)
-
-
-@app.post("/demo/contacts/{contact_id}/unpause")
-def demo_unpause_contact(
-    contact_id: int,
-    session: Session = Depends(get_session),
-    _context: RequestContext = DashboardContext,
-) -> RedirectResponse:
-    contact = session.get(Contact, contact_id)
-    if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    contact.status = "active"
-    contact.status_reason = "resumed_from_demo_monitor"
-    session.commit()
-    return RedirectResponse(url="/", status_code=303)
-
-
 @app.get("/api/me", response_model=MeOut)
 def get_me(
     user: CurrentUser = DashboardUser,
@@ -494,14 +445,6 @@ def delete_property_route(
         raise HTTPException(status_code=404, detail=str(error)) from error
     session.commit()
     return summary
-
-
-@app.get("/api/playbooks", response_model=list[PropertyPlaybookOut])
-def list_playbooks_route(
-    session: Session = Depends(get_session),
-    _context: RequestContext = DashboardContext,
-) -> list[PropertyPlaybook]:
-    return list_property_playbooks(session)
 
 
 @app.get("/api/properties/{property_id}/playbook", response_model=PropertyPlaybookOut)
