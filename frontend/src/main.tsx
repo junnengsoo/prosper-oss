@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock,
-  GripVertical,
   Image as ImageIcon,
   Inbox,
   LockKeyhole,
@@ -58,17 +57,11 @@ import {
 } from "./viewState";
 import "./styles.css";
 
-type WorkflowKey = "initial_reply_blocks";
 type EditorSection = "facts" | "gallery" | "auto_replies";
 type AutoReplyField = "availableInitial";
-type AutoReplyWorkflowKey = "initial_reply_blocks";
 type PropertyRequiredField = "property_name" | "status" | "property_url";
 
 const PROPERTY_REQUIRED_FIELDS: PropertyRequiredField[] = ["property_name", "status", "property_url"];
-
-const WORKFLOWS: Array<{ key: WorkflowKey; label: string; help: string }> = [
-  { key: "initial_reply_blocks", label: "Initial Reply", help: "Sent after Prosper matches this rental listing." },
-];
 
 const EDITOR_SECTIONS: Array<{ key: EditorSection; label: string }> = [
   { key: "facts", label: "Listing Facts" },
@@ -144,7 +137,7 @@ function defaultPlaybookInput(): PropertyPlaybookInput {
 }
 
 function hasWorkflowBlocks(input: PropertyPlaybookInput): boolean {
-  return WORKFLOWS.some((workflow) => input[workflow.key].length > 0);
+  return input.initial_reply_blocks.length > 0;
 }
 
 function effectivePlaybookInput(playbook: PropertyPlaybook | null | undefined): PropertyPlaybookInput {
@@ -190,19 +183,14 @@ function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[])
   ];
 }
 
-function autoReplyWorkflowKey(field: AutoReplyField): AutoReplyWorkflowKey {
-  return "initial_reply_blocks";
-}
-
 function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField): PlaybookBlock[] {
-  return compactAutoReplyBlocks(input[autoReplyWorkflowKey(field)], field);
+  return compactAutoReplyBlocks(input.initial_reply_blocks, field);
 }
 
 function playbookWithAutoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, blocks: PlaybookBlock[]): PropertyPlaybookInput {
-  const key = autoReplyWorkflowKey(field);
   return {
     ...input,
-    [key]: [...compactAutoReplyBlocks(blocks, field), { type: "gallery", mode: "enabled_property_gallery" } as PlaybookBlock],
+    initial_reply_blocks: [...compactAutoReplyBlocks(blocks, field), { type: "gallery", mode: "enabled_property_gallery" }],
   };
 }
 
@@ -335,18 +323,6 @@ function stageSummary(run?: StageRun | null): string {
   }
 }
 
-function blockLabel(block: PlaybookBlock): string {
-  if (block.type === "message") return "Message";
-  if (block.type === "delay") return "Delay";
-  if (block.type === "gallery") return "Gallery";
-  return "Gallery";
-}
-
-function blockCount(playbook?: PropertyPlaybook | null): number {
-  if (!playbook) return 0;
-  return WORKFLOWS.reduce((total, field) => total + (playbook[field.key]?.length ?? 0), 0);
-}
-
 function replacePlaceholders(text: string, property: PropertyRecord | null | undefined, config: Record<string, string>): string {
   const unitInfo = property
     ? `${property.property_name}${property.asking_rent ? `, ${formatMoney(property.asking_rent)}` : ""}${property.available_from ? `, available ${property.available_from}` : ""}`
@@ -372,7 +348,6 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
-  const [playbooks, setPlaybooks] = useState<PropertyPlaybook[]>([]);
   const [stageRuns, setStageRuns] = useState<StageRun[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [whatsappPanelOpen, setWhatsappPanelOpen] = useState(false);
@@ -397,8 +372,6 @@ function App() {
   const [propertyFormErrors, setPropertyFormErrors] = useState<Partial<Record<PropertyRequiredField, string>>>({});
   const [mediaPathForm, setMediaPathForm] = useState({ file_path: "", caption: "", sort_order: 0, enabled: true, media_type: "photo" as "photo" | "video" });
 
-  const [selectedPlaybookPropertyId, setSelectedPlaybookPropertyId] = useState("");
-  const [workflowKey, setWorkflowKey] = useState<WorkflowKey>("initial_reply_blocks");
   const [playbookDraft, setPlaybookDraft] = useState<PropertyPlaybookInput>(emptyPlaybook);
   const [playbookBaseline, setPlaybookBaseline] = useState<PropertyPlaybookInput>(emptyPlaybook);
   const loadedPlaybookPropertyIdRef = useRef("");
@@ -463,12 +436,11 @@ function App() {
       api.contacts(),
       api.conversations(true),
       includeSetup ? api.properties() : Promise.resolve(null),
-      includeSetup ? api.playbooks() : Promise.resolve(null),
       api.stageRuns(),
       includeSetup ? api.config() : Promise.resolve(null),
       api.runtimeStatus(),
     ]);
-    const [contactsResult, conversationsResult, propertiesResult, playbooksResult, stageResult, configResult, runtimeResult] = results;
+    const [contactsResult, conversationsResult, propertiesResult, stageResult, configResult, runtimeResult] = results;
     const nextWarnings: string[] = [];
 
     if (contactsResult.status === "fulfilled") setContacts(contactsResult.value);
@@ -477,8 +449,6 @@ function App() {
     else nextWarnings.push(`Conversations: ${conversationsResult.reason}`);
     if (propertiesResult.status === "fulfilled" && propertiesResult.value) setProperties(propertiesResult.value);
     else if (propertiesResult.status === "rejected") nextWarnings.push(`Properties: ${propertiesResult.reason}`);
-    if (playbooksResult.status === "fulfilled" && playbooksResult.value) setPlaybooks(playbooksResult.value);
-    else if (playbooksResult.status === "rejected") nextWarnings.push(`Playbooks: ${playbooksResult.reason}`);
     if (stageResult.status === "fulfilled") setStageRuns(stageResult.value);
     else nextWarnings.push(`Stage runs: ${stageResult.reason}`);
     if (configResult.status === "fulfilled" && configResult.value) setConfig(configResult.value.values);
@@ -567,27 +537,22 @@ function App() {
     void api.messages(selectedConversationId).then(setMessages).catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
   }, [selectedConversationId]);
 
-  useEffect(() => {
-    if (!selectedPlaybookPropertyId && properties[0]) setSelectedPlaybookPropertyId(properties[0].property_id);
-  }, [properties, selectedPlaybookPropertyId]);
-
-  const selectedPlaybookProperty = selectedPlaybookPropertyId ? properties.find((property) => property.property_id === selectedPlaybookPropertyId) ?? null : null;
-  const selectedPlaybookRecord = selectedPlaybookPropertyId ? playbooks.find((playbook) => playbook.property_id === selectedPlaybookPropertyId) ?? null : null;
+  const editingPlaybookPropertyId = editingPropertyId && editingPropertyId !== "__new__" ? editingPropertyId : "";
   const playbookDirty = JSON.stringify(playbookDraft) !== JSON.stringify(playbookBaseline);
 
   useEffect(() => {
-    if (!selectedPlaybookPropertyId || !authReady) return;
-    if (loadedPlaybookPropertyIdRef.current === selectedPlaybookPropertyId && playbookDirty) return;
+    if (!editingPlaybookPropertyId || !authReady) return;
+    if (loadedPlaybookPropertyIdRef.current === editingPlaybookPropertyId && playbookDirty) return;
     void api
-      .propertyPlaybook(selectedPlaybookPropertyId)
+      .propertyPlaybook(editingPlaybookPropertyId)
       .then((playbook) => {
         const input = effectiveAutoReplyInput(playbook);
-        loadedPlaybookPropertyIdRef.current = selectedPlaybookPropertyId;
+        loadedPlaybookPropertyIdRef.current = editingPlaybookPropertyId;
         setPlaybookDraft(input);
         setPlaybookBaseline(input);
       })
       .catch((error) => setStatus(error instanceof Error ? error.message : String(error)));
-  }, [authReady, playbookDirty, selectedPlaybookPropertyId]);
+  }, [authReady, editingPlaybookPropertyId, playbookDirty]);
   function updatePropertyForm(patch: Partial<PropertyInput>) {
     setPropertyForm((current) => ({ ...current, ...patch }));
     const touchedKeys = PROPERTY_REQUIRED_FIELDS.filter((key) => Object.prototype.hasOwnProperty.call(patch, key));
@@ -674,7 +639,6 @@ function App() {
 
   function openPropertyEditor(property: PropertyRecord) {
     setEditingPropertyId(property.property_id);
-    setSelectedPlaybookPropertyId(property.property_id);
     setPropertyForm(propertyToInput(property));
     setPropertyFormErrors({});
     setEditorSection("facts");
@@ -683,18 +647,12 @@ function App() {
 
   function openNewPropertyEditor() {
     setEditingPropertyId("__new__");
-    setSelectedPlaybookPropertyId("");
     setPropertyForm({ ...EMPTY_PROPERTY_FORM });
     setPropertyFormErrors({});
     setPlaybookDraft(defaultPlaybookInput());
     setPlaybookBaseline(defaultPlaybookInput());
     setEditorSection("facts");
     setActiveView("properties");
-  }
-
-  function openPlaybook(propertyId: string) {
-    const property = properties.find((item) => item.property_id === propertyId);
-    if (property) openPropertyEditor(property);
   }
 
   async function saveProperty() {
@@ -720,7 +678,6 @@ function App() {
     const saved = await api.upsertProperty(payload);
     setPropertyFormErrors({});
     setEditingPropertyId(saved.property_id);
-    setSelectedPlaybookPropertyId(saved.property_id);
     setPropertyForm(propertyToInput(saved));
     await loadAll();
     return saved;
@@ -766,7 +723,6 @@ function App() {
     const summary = ids.length === 1 ? await api.deleteProperty(ids[0]) : await api.bulkDeleteProperties(ids);
     setSelectedPropertyIds((current) => current.filter((propertyId) => !summary.deleted_property_ids.includes(propertyId)));
     if (editingPropertyId && summary.deleted_property_ids.includes(editingPropertyId)) setEditingPropertyId(null);
-    if (selectedPlaybookPropertyId && summary.deleted_property_ids.includes(selectedPlaybookPropertyId)) setSelectedPlaybookPropertyId("");
     await loadAll();
   }
 
@@ -795,15 +751,6 @@ function App() {
     await loadAll();
   }
 
-  async function savePlaybook() {
-    if (!selectedPlaybookPropertyId) throw new Error("Choose a property");
-    const saved = await api.upsertPropertyPlaybook(selectedPlaybookPropertyId, playbookDraft);
-    const input = effectivePlaybookInput(saved);
-    setPlaybookDraft(input);
-    setPlaybookBaseline(input);
-    await loadAll();
-  }
-
   async function saveAutoRepliesForProperty(propertyId: string) {
     const payload = cleanAutoRepliesForSave(playbookDraft);
     const saved = await api.upsertPropertyPlaybook(propertyId, payload);
@@ -811,30 +758,6 @@ function App() {
     setPlaybookDraft(input);
     setPlaybookBaseline(input);
     await loadAll();
-  }
-
-  function updateBlock(index: number, patch: Partial<PlaybookBlock>) {
-    setPlaybookDraft((current) => {
-      const blocks = [...current[workflowKey]];
-      blocks[index] = { ...blocks[index], ...patch };
-      return { ...current, [workflowKey]: blocks };
-    });
-  }
-
-  function addBlock(type: PlaybookBlock["type"]) {
-    const next: PlaybookBlock =
-      type === "message"
-        ? { type, text: "" }
-        : type === "delay"
-          ? { type, seconds: 2 }
-          : type === "gallery"
-            ? { type, mode: "enabled_property_gallery" }
-            : { type };
-    setPlaybookDraft((current) => ({ ...current, [workflowKey]: [...current[workflowKey], next] }));
-  }
-
-  function removeBlock(index: number) {
-    setPlaybookDraft((current) => ({ ...current, [workflowKey]: current[workflowKey].filter((_, itemIndex) => itemIndex !== index) }));
   }
 
   async function submitFakeMessage() {
@@ -1708,126 +1631,6 @@ function AutoReplySequence({
 
 function messageNumber(blocks: PlaybookBlock[], index: number): number {
   return blocks.slice(0, index + 1).filter((block) => block.type === "message").length;
-}
-
-function PlaybookView({
-  properties,
-  playbooks,
-  selectedPropertyId,
-  setSelectedPropertyId,
-  property,
-  record,
-  draft,
-  setDraft,
-  workflowKey,
-  setWorkflowKey,
-  dirty,
-  config,
-  onSave,
-  updateBlock,
-  addBlock,
-  removeBlock,
-}: {
-  properties: PropertyRecord[];
-  playbooks: PropertyPlaybook[];
-  selectedPropertyId: string;
-  setSelectedPropertyId: (id: string) => void;
-  property: PropertyRecord | null;
-  record: PropertyPlaybook | null;
-  draft: PropertyPlaybookInput;
-  setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  baseline: PropertyPlaybookInput;
-  workflowKey: WorkflowKey;
-  setWorkflowKey: (key: WorkflowKey) => void;
-  dirty: boolean;
-  config: Record<string, string>;
-  onSave: () => void;
-  updateBlock: (index: number, patch: Partial<PlaybookBlock>) => void;
-  addBlock: (type: PlaybookBlock["type"]) => void;
-  removeBlock: (index: number) => void;
-}) {
-  const blocks = draft[workflowKey];
-  const enabledMedia = property?.media.filter((item) => item.enabled) ?? [];
-  return (
-    <section className="playbookLayout">
-      <aside className="playbookListPane">
-        <div className="searchBox"><Search size={18} /><input placeholder="Search listings..." /></div>
-        <div className="playbookPropertyList">
-          {properties.map((item) => {
-            const playbook = playbooks.find((candidate) => candidate.property_id === item.property_id);
-            const state = !playbook || playbook.enabled === false ? "Disabled" : blockCount(playbook) > 0 ? "Custom" : "Empty";
-            return (
-              <button key={item.property_id} className={classNames(selectedPropertyId === item.property_id && "active")} onClick={() => setSelectedPropertyId(item.property_id)}>
-                <strong>{item.property_name}</strong>
-                <span>{item.bedrooms ?? "-"}BR · {formatMoney(item.asking_rent)}</span>
-                <b className={classNames("badge", state === "Disabled" ? "danger" : state === "Custom" ? "success" : "neutral")}>{state}</b>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-      <section className="workflowEditor">
-        <div className="workflowHeader">
-          <div>
-            <h2>WhatsApp Workflow</h2>
-            <p>Edit WhatsApp replies for {property?.property_name || "this listing"}.</p>
-          </div>
-          <label className="toggleRow">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-            Enabled
-          </label>
-          <button className="primaryButton" onClick={onSave} disabled={!dirty}><Save size={16} /> Save Changes</button>
-        </div>
-        <div className="workflowTabs">
-          {WORKFLOWS.map((item) => (
-            <button key={item.key} className={workflowKey === item.key ? "active" : ""} onClick={() => setWorkflowKey(item.key)}>{item.label}</button>
-          ))}
-        </div>
-        <p className="workflowHelp">{WORKFLOWS.find((item) => item.key === workflowKey)?.help}</p>
-        <div className="blockStack">
-          {blocks.map((block, index) => (
-            <article key={`${index}-${block.type}`} className="workflowBlock">
-              <div className="blockHeader">
-                <b>{index + 1}</b>
-                <strong>{blockLabel(block)}</strong>
-                <GripVertical size={17} />
-                <button onClick={() => removeBlock(index)}><X size={16} /></button>
-              </div>
-              {block.type === "message" && (
-                <>
-                  <textarea value={block.text ?? ""} onChange={(event) => updateBlock(index, { text: event.target.value })} rows={3} />
-                  <div className="placeholderRow">
-                    {PLACEHOLDERS.map((placeholder) => (
-                      <button key={placeholder} onClick={() => updateBlock(index, { text: `${block.text ?? ""}${placeholder}` })}>{placeholder}</button>
-                    ))}
-                  </div>
-                </>
-              )}
-              {block.type === "delay" && (
-                <label className="delayInput"><Clock size={16} /> Wait <input type="number" value={block.seconds ?? 1} onChange={(event) => updateBlock(index, { seconds: Number(event.target.value) })} /> seconds</label>
-              )}
-              {block.type === "gallery" && (
-                <div className="galleryBlockSummary">
-                  <ImageIcon size={18} />
-                  <div><strong>Send property Gallery</strong><span>{enabledMedia.length} enabled media item{enabledMedia.length === 1 ? "" : "s"}</span></div>
-                  {enabledMedia.length === 0 && <span className="badge warning">No enabled media</span>}
-                </div>
-              )}
-            </article>
-          ))}
-          {blocks.length === 0 && <EmptyState title="No blocks yet" body="Add message, delay, or gallery blocks for this workflow." />}
-        </div>
-        <div className="blockAddRow">
-          <button onClick={() => addBlock("message")}><Plus size={16} /> Message</button>
-          <button onClick={() => addBlock("delay")}><Clock size={16} /> Delay</button>
-          <button onClick={() => addBlock("gallery")}><ImageIcon size={16} /> Gallery</button>
-        </div>
-      </section>
-      <aside className="phonePreviewPane">
-        <WhatsAppPreview property={property} blocks={blocks} config={config} />
-      </aside>
-    </section>
-  );
 }
 
 function SimulatorView({
