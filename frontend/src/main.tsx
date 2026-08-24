@@ -30,7 +30,6 @@ import {
 } from "lucide-react";
 import {
   api,
-  apiUrl,
   type Contact,
   type Conversation,
   type Me,
@@ -47,7 +46,7 @@ import {
   type WhatsappConnection,
   type WhatsappQr,
 } from "./api";
-import { buildInboxRows, filterInboxRows, queueActionForConversation, type QueueFilter } from "./queueState";
+import { buildInboxRows, filterInboxRows, type QueueFilter } from "./queueState";
 import {
   APP_VIEW_STORAGE_KEY,
   appViewHash,
@@ -55,6 +54,21 @@ import {
   normalizeHashView,
   readStoredAppView,
 } from "./viewState";
+import { InboxView } from "./views/InboxView";
+import { SimulatorView } from "./views/SimulatorView";
+import {
+  classNames,
+  EmptyState,
+  formatDateTime,
+  formatMoney,
+  GalleryPreview,
+  initials,
+  MediaPreview,
+  propertyAvailabilityLabel,
+  propertyAvailabilityTone,
+  replacePlaceholders,
+  statusTone,
+} from "./viewHelpers";
 import "./styles.css";
 
 type EditorSection = "facts" | "gallery" | "auto_replies";
@@ -254,108 +268,6 @@ function generatedPropertyId(name: string, existingIds: Set<string>): string {
 function getInitialView(): AppView {
   if (typeof window === "undefined") return "inbox";
   return normalizeHashView(window.location.hash) ?? readStoredAppView(window.localStorage) ?? "inbox";
-}
-
-function classNames(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
-}
-
-function formatMoney(value?: number | null): string {
-  if (!value) return "Rent not set";
-  return `S$ ${new Intl.NumberFormat("en-SG").format(value)} /mo`;
-}
-
-function formatTime(timestampMs?: number | null): string {
-  if (!timestampMs) return "";
-  return new Intl.DateTimeFormat("en-SG", { hour: "2-digit", minute: "2-digit" }).format(new Date(timestampMs));
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) return "";
-  return new Intl.DateTimeFormat("en-SG", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-}
-
-function statusTone(value?: string | null): "success" | "warning" | "danger" | "neutral" {
-  if (!value) return "neutral";
-  if (["active", "available", "sent", "success", "match", "open"].includes(value)) return "success";
-  if (["pending", "draft", "handover", "manual_review"].includes(value)) return "warning";
-  if (["paused", "ignored", "closed", "failed", "error", "unavailable"].includes(value)) return "danger";
-  return "neutral";
-}
-
-function statusLabel(value?: string | null): string {
-  if (!value) return "No run";
-  if (value === "manual_review") return "Manual Review";
-  return value.replace(/_/g, " ");
-}
-
-function manualReviewReason(value: unknown): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  if (record.stage_status === "manual_review" || record.match_status === "manual_review") {
-    return typeof record.reason === "string" ? record.reason : "Review before replying.";
-  }
-  for (const child of Object.values(record)) {
-    const reason = manualReviewReason(child);
-    if (reason) return reason;
-  }
-  return null;
-}
-
-function propertyAvailabilityLabel(status?: string | null): string {
-  return status === "available" ? "Available" : "Not available";
-}
-
-function propertyAvailabilityTone(status?: string | null): "success" | "danger" {
-  return status === "available" ? "success" : "danger";
-}
-
-function initials(value?: string | null): string {
-  const clean = (value || "?").trim();
-  return clean
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "?";
-}
-
-function truncate(value: string | null | undefined, length = 90): string {
-  if (!value) return "";
-  return value.length > length ? `${value.slice(0, length - 1)}…` : value;
-}
-
-function mediaSrc(media?: PropertyMedia): string | undefined {
-  if (!media) return undefined;
-  return apiUrl(`/api/property-media/${media.id}/content`);
-}
-
-function stageSummary(run?: StageRun | null): string {
-  if (!run) return "No stage run yet.";
-  if (run.error) return run.error;
-  if (!run.output_json) return `${run.stage} completed.`;
-  try {
-    const parsed = JSON.parse(run.output_json) as Record<string, unknown>;
-    const reason = manualReviewReason(parsed);
-    if (reason) {
-      return `Manual Review: ${reason}`;
-    }
-    const direct = parsed.reason || parsed.summary || parsed.status || parsed.match_status;
-    return typeof direct === "string" ? direct : JSON.stringify(parsed).slice(0, 160);
-  } catch {
-    return run.output_json.slice(0, 160);
-  }
-}
-
-function replacePlaceholders(text: string, property: PropertyRecord | null | undefined, config: Record<string, string>): string {
-  const unitInfo = property
-    ? `${property.property_name}${property.asking_rent ? `, ${formatMoney(property.asking_rent)}` : ""}${property.available_from ? `, available ${property.available_from}` : ""}`
-    : "this unit";
-  return [
-    ["{unit_info}", unitInfo],
-    ["{tenant_notes}", property?.tenant_facing_caveats || ""],
-    ["{tenant_facing_caveats}", property?.tenant_facing_caveats || ""],
-    ["{property_guru_listing}", property?.property_url || ""],
-  ].reduce((current, [token, value]) => current.split(token).join(value), text);
 }
 
 function App() {
@@ -871,7 +783,6 @@ function App() {
             setSearch={setInboxSearch}
             selectedConversationId={selectedConversationId}
             setSelectedConversationId={setSelectedConversationId}
-            contacts={contacts}
             properties={properties}
             selectedConversation={selectedConversation}
             selectedContact={selectedContact}
@@ -1134,129 +1045,6 @@ function WhatsappConnectionModal({
         )}
       </section>
     </div>
-  );
-}
-
-function InboxView({
-  rows,
-  search,
-  setSearch,
-  selectedConversationId,
-  setSelectedConversationId,
-  properties,
-  selectedConversation,
-  selectedContact,
-  selectedProperty,
-  messages,
-  latestStageRun,
-  selectedStageRuns,
-  onOpenProperty,
-}: {
-  rows: ReturnType<typeof buildInboxRows>;
-  search: string;
-  setSearch: (value: string) => void;
-  selectedConversationId: number | null;
-  setSelectedConversationId: (id: number) => void;
-  contacts: Contact[];
-  properties: PropertyRecord[];
-  selectedConversation: Conversation | null;
-  selectedContact: Contact | null;
-  selectedProperty: PropertyRecord | null;
-  messages: Message[];
-  latestStageRun: StageRun | null;
-  selectedStageRuns: StageRun[];
-  onOpenProperty?: () => void;
-}) {
-  return (
-    <section className="inboxLayout">
-      <aside className="leadListPane">
-        <div className="searchBox">
-          <Search size={18} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for leads" />
-        </div>
-            <div className="filterChips">
-              <button className="active">All Today</button>
-              <button>Unread</button>
-              <button>Interested</button>
-              <button>Matched</button>
-        </div>
-        <div className="leadList">
-          {rows.length === 0 && <EmptyState title="No matched enquiries" body="Matched WhatsApp enquiries will appear here after rental listing matching." />}
-          {rows.map((row) => {
-            const property = row.conversation.matched_property_id ? properties.find((item) => item.property_id === row.conversation.matched_property_id) : null;
-            const action = queueActionForConversation(row.conversation, row.contact);
-            return (
-              <button
-                key={row.conversation.id}
-                className={classNames("leadRow", selectedConversationId === row.conversation.id && "active")}
-                onClick={() => setSelectedConversationId(row.conversation.id)}
-              >
-                <div className="leadRowTop">
-                  <strong>{row.contact?.display_name || row.contact?.phone || row.contact?.chat_jid || "Unknown lead"}</strong>
-                  <span>{formatTime(row.conversation.latest_message_timestamp_ms)}</span>
-                </div>
-                <p>{truncate(row.conversation.latest_message_text, 72) || "No latest message"}</p>
-                <div className="leadProperty">
-                  <Building2 size={14} />
-                  <span>{property?.property_name || row.conversation.matched_property_id || action.label}</span>
-                  <b className={classNames("badge", action.tone)}>{action.label}</b>
-                  <i className={classNames("dot", action.tone)} />
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-      <section className="leadDetailPane">
-        {!selectedConversation ? (
-          <EmptyState title="Select a matched enquiry" body="The lead transcript, matched listing, and audit summary will appear here." />
-        ) : (
-          <>
-            <div className="leadHeader">
-              <div className="leadAvatar">{initials(selectedContact?.display_name || selectedContact?.chat_jid)}</div>
-              <div>
-                <h2>{selectedContact?.display_name || selectedContact?.phone || selectedContact?.chat_jid}</h2>
-                <span>Last active {formatTime(selectedConversation.latest_message_timestamp_ms)} · Singapore</span>
-              </div>
-              <div className="leadActions">
-                <button><Phone size={16} /> Call</button>
-                <button className="primaryButton"><MessageSquare size={16} /> WhatsApp Agent</button>
-              </div>
-            </div>
-            <div className="leadSummaryGrid">
-              <article className="matchedPropertyCard">
-                <GalleryPreview media={selectedProperty?.media ?? []} />
-                <div>
-                  <strong>{selectedProperty?.property_name || selectedConversation.matched_property_id}</strong>
-                  <span>{selectedProperty?.full_address || "Matched property"}</span>
-                  <b>{formatMoney(selectedProperty?.asking_rent)}</b>
-                </div>
-                {onOpenProperty && <button onClick={onOpenProperty}>Edit</button>}
-              </article>
-              <article className="auditCard">
-                <div className="cardTitle">
-                  <span>Prosper Audit</span>
-                  <b className={classNames("badge", statusTone(latestStageRun?.status))}>{statusLabel(latestStageRun?.status)}</b>
-                </div>
-                <p>{stageSummary(latestStageRun)}</p>
-                <details>
-                  <summary>Decision timeline</summary>
-                  <div className="timelineList">
-                    {selectedStageRuns.map((run) => (
-                      <div key={run.id}>
-                        <strong>{run.stage}</strong>
-                        <span>{statusLabel(run.status)} · {formatDateTime(run.created_at)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </article>
-            </div>
-            <MessageThread messages={messages} />
-          </>
-        )}
-      </section>
-    </section>
   );
 }
 
@@ -1657,107 +1445,6 @@ function messageNumber(blocks: PlaybookBlock[], index: number): number {
   return blocks.slice(0, index + 1).filter((block) => block.type === "message").length;
 }
 
-function SimulatorView({
-  conversations,
-  selectedConversation,
-  selectedConversationId,
-  creatingFakeChat,
-  setSelectedConversationId,
-  messages,
-  fakeText,
-  setFakeText,
-  fakeSending,
-  fakeChatId,
-  setFakeChatId,
-  fakeDisplayName,
-  setFakeDisplayName,
-  onSend,
-  onNewChat,
-  onReset,
-}: {
-  conversations: Conversation[];
-  selectedConversation: Conversation | null;
-  selectedConversationId: number | null;
-  creatingFakeChat: boolean;
-  setSelectedConversationId: (id: number) => void;
-  messages: Message[];
-  fakeText: string;
-  setFakeText: (value: string) => void;
-  fakeSending: boolean;
-  fakeChatId: string;
-  setFakeChatId: (value: string) => void;
-  fakeDisplayName: string;
-  setFakeDisplayName: (value: string) => void;
-  onSend: () => void;
-  onNewChat: () => void;
-  onReset: () => void;
-}) {
-  return (
-    <section className="simulatorLayout">
-      <aside className="simListPane">
-        <div className="simHeader">
-          <h2>Simulations</h2>
-          <div className="simHeaderActions">
-            <button onClick={onReset} title="Clear simulator data" aria-label="Clear simulator data"><Trash2 size={16} /></button>
-            <button className="primaryButton" onClick={onNewChat}><Plus size={16} /> New</button>
-          </div>
-        </div>
-        <div className="simConfig">
-          <input value={fakeDisplayName} onChange={(event) => setFakeDisplayName(event.target.value)} placeholder="Display name" />
-          <input value={fakeChatId} onChange={(event) => setFakeChatId(event.target.value)} placeholder="Fake chat ID" />
-        </div>
-        <div className="simList">
-          {creatingFakeChat && (
-            <button className="active draftChatRow" type="button">
-              <strong>New chat</strong>
-              <span>{fakeDisplayName || fakeChatId}</span>
-            </button>
-          )}
-          {conversations.map((conversation) => (
-            <button key={conversation.id} className={conversation.id === selectedConversationId ? "active" : ""} onClick={() => setSelectedConversationId(conversation.id)}>
-              <strong>Tenant #{conversation.id}</strong>
-              <span>{truncate(conversation.latest_message_text, 44) || "No latest message"}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
-      <section className="simChatPane">
-        <div className="chatHeader">
-          <div className="leadAvatar">{initials(fakeDisplayName)}</div>
-          <div><strong>{fakeDisplayName}</strong><span>{selectedConversation ? `Conversation #${selectedConversation.id}` : "New local chat"}</span></div>
-        </div>
-        <MessageThread messages={messages} whatsapp />
-        <div className="chatComposer">
-          <span className="composerStatus">{fakeSending ? "Sending..." : <Plus size={20} />}</span>
-          <textarea value={fakeText} onChange={(event) => setFakeText(event.target.value)} placeholder="Type a fake tenant WhatsApp message..." onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              onSend();
-            }
-          }} disabled={fakeSending} />
-          <button className="primaryButton" disabled={fakeSending || !fakeText.trim()} onClick={onSend} aria-label="Send fake message" title="Send fake message">
-            {fakeSending ? <Clock size={18} /> : <Send size={18} />}
-          </button>
-        </div>
-      </section>
-    </section>
-  );
-}
-
-function MessageThread({ messages, whatsapp = false }: { messages: Message[]; whatsapp?: boolean }) {
-  return (
-    <div className={classNames("messageThread", whatsapp && "whatsappThread")}>
-      {messages.length === 0 && <EmptyState title="No messages yet" body="Messages will appear here once this conversation has activity." />}
-      {messages.map((message) => (
-        <article key={message.id} className={classNames("bubble", message.direction === "outbound" || message.direction === "from_me" ? "outbound" : "inbound")}>
-          <p>{message.text}</p>
-          <span>{formatTime(message.timestamp_ms)}</span>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecord | null; blocks: PlaybookBlock[]; config: Record<string, string> }) {
   return (
     <div className="phoneShell">
@@ -1788,22 +1475,6 @@ function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecor
   );
 }
 
-function GalleryPreview({ media }: { media: PropertyMedia[] }) {
-  const first = media.find((item) => mediaSrc(item));
-  if (first) return <MediaPreview media={first} className="galleryPreviewImage" />;
-  return <div className="galleryPreviewImage placeholder"><ImageIcon size={24} /></div>;
-}
-
-function MediaPreview({ media, className = "" }: { media: PropertyMedia; className?: string }) {
-  const src = mediaSrc(media);
-  const label = media.caption || media.file_path;
-  if (!src) return <ImageIcon className={className} size={28} />;
-  if (media.media_type === "video") {
-    return <video className={className} src={src} aria-label={label} muted playsInline preload="metadata" controls />;
-  }
-  return <img className={className} src={src} alt={label} />;
-}
-
 function Field({ label, children, wide = false, required = false, error = "" }: { label: string; children: React.ReactNode; wide?: boolean; required?: boolean; error?: string }) {
   return (
     <label className={classNames("field", wide && "wide", error && "error")}>
@@ -1821,10 +1492,6 @@ function EditorPanel({ title, body, children }: { title: string; body: string; c
       <div className="formGrid">{children}</div>
     </article>
   );
-}
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return <div className="emptyState"><strong>{title}</strong><span>{body}</span></div>;
 }
 
 createRoot(document.getElementById("root")!).render(

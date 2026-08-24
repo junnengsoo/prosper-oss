@@ -1,0 +1,169 @@
+.simulatorLayout {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  min-height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+.simListPane {
+  background: #fff;
+  border-right: 1px solid var(--border);
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.simHeader,
+.chatHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.simHeader {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.simHeader h2 {
+  margin: 0;
+}
+
+.simHeaderActions {
+  display: flex;
+  gap: 8px;
+}
+
+.simConfig {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.simList {
+  display: grid;
+  gap: 8px;
+}
+
+.simList button {
+  border: 0;
+  border-left: 4px solid transparent;
+  background: transparent;
+  text-align: left;
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.simList button.active {
+  border-left-color: var(--green-dark);
+  background: #e9fff0;
+}
+
+.simList .draftChatRow {
+  border: 1px dashed #8ad8a2;
+  border-left: 4px solid var(--green-dark);
+}
+
+.simList span,
+.chatHeader span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.simChatPane {
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr) auto;
+  min-width: 0;
+  background: #f8f9fa;
+}
+
+.chatHeader {
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  padding: 0 18px;
+}
+
+.whatsappThread {
+  padding: 18px;
+  overflow-y: auto;
+  background: #efeae2;
+}
+
+.whatsappThread .bubble.outbound {
+  background: #d8ffc4;
+  color: #111;
+}
+
+.chatComposer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 18px;
+  background: #fff;
+  border-top: 1px solid var(--border);
+}
+
+.composerStatus {
+  min-width: 72px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chatComposer textarea {
+  min-height: 46px;
+  max-height: 120px;
+}
+
+@media (max-width: 1200px) {
+  .simulatorLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .simulatorLayout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .simListPane {
+    max-height: 230px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 12px;
+  }
+
+  .simHeader {
+    margin-bottom: 10px;
+  }
+
+  .simConfig {
+    grid-template-columns: 1fr;
+    margin-bottom: 10px;
+  }
+
+  .simList {
+    max-height: 76px;
+    overflow-y: auto;
+  }
+
+  .simChatPane {
+    min-height: 520px;
+  }
+
+  .chatComposer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .composerStatus {
+    display: none;
+  }
+}
