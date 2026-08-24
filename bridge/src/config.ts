@@ -11,9 +11,8 @@ dotenv.config();
 export const BACKEND_BASE_URL = process.env.WHATSAPP_PA_BACKEND_URL ?? "http://127.0.0.1:8000";
 export const BRIDGE_HOST = process.env.WHATSAPP_PA_BRIDGE_HOST ?? "127.0.0.1";
 export const BRIDGE_PORT = Number(process.env.WHATSAPP_PA_BRIDGE_PORT ?? "8788");
-const LEGACY_BURST_WAIT_MS = process.env.WHATSAPP_PA_BURST_WAIT_MS ?? "30000";
-export const WHATSAPP_TRIAGE_BURST_WAIT_MS = Number(process.env.WHATSAPP_PA_TRIAGE_BURST_WAIT_MS ?? LEGACY_BURST_WAIT_MS);
-export const WHATSAPP_ACTIVE_BURST_WAIT_MS = Number(process.env.WHATSAPP_PA_ACTIVE_BURST_WAIT_MS ?? LEGACY_BURST_WAIT_MS);
+export const WHATSAPP_TRIAGE_BURST_WAIT_MS = Number(process.env.WHATSAPP_PA_TRIAGE_BURST_WAIT_MS ?? "30000");
+export const WHATSAPP_ACTIVE_BURST_WAIT_MS = Number(process.env.WHATSAPP_PA_ACTIVE_BURST_WAIT_MS ?? "30000");
 export const WHATSAPP_BRIDGE_TOKEN = (process.env.WHATSAPP_PA_BRIDGE_TOKEN ?? "").trim();
 export const WHATSAPP_PAIRING_PHONE_NUMBER = (process.env.WHATSAPP_PAIRING_PHONE_NUMBER ?? "").replace(/\D/g, "");
 export const WHATSAPP_HISTORY_SYNC_ONBOARDING =

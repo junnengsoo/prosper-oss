@@ -75,6 +75,52 @@ def test_single_user_cookie_auth_flow(session, monkeypatch):
         get_settings.cache_clear()
 
 
+@pytest.mark.parametrize(
+    ("path", "method", "body"),
+    [
+        ("/api/bridge/chat-state?chat_jid=tenant@s.whatsapp.net", "GET", None),
+        (
+            "/api/bridge/inbound",
+            "POST",
+            {
+                "chat_jid": "tenant@s.whatsapp.net",
+                "sender_jid": "tenant@s.whatsapp.net",
+                "message_id": "message-1",
+                "timestamp_ms": 1_700_000_000_000,
+                "from_me": False,
+                "text": "Hi is this available?",
+                "raw_type": "conversation",
+            },
+        ),
+        ("/api/bridge/inbound-batch", "POST", {"messages": []}),
+    ],
+)
+def test_bridge_callback_routes_require_configured_bridge_token(session, monkeypatch, path, method, body):
+    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "backend-secret")
+    get_settings.cache_clear()
+
+    def override_session():
+        yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        client = TestClient(app)
+
+        missing = client.request(method, path, json=body)
+        assert missing.status_code == 401
+        assert missing.json()["detail"] == "Invalid bridge token"
+
+        invalid = client.request(method, path, headers={"x-whatsapp-bridge-token": "wrong-token"}, json=body)
+        assert invalid.status_code == 401
+        assert invalid.json()["detail"] == "Invalid bridge token"
+
+        valid = client.request(method, path, headers={"x-whatsapp-bridge-token": "backend-secret"}, json=body)
+        assert valid.status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+        get_settings.cache_clear()
+
+
 def test_session_tokens_reject_tampering_and_expiration(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")
     monkeypatch.setenv("ACCESS_PASSWORD", "correct-password")

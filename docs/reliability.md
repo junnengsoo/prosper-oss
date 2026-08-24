@@ -18,13 +18,15 @@ Provider errors, invalid JSON, and invalid output shapes are recorded as failed 
 
 Playbooks render outbound content deterministically from validated stage results. The send lock, action safety checks, bridge retry behavior, and outbound action records provide separate controls around the final side effect.
 
+The optional Baileys bridge is experimental, and outbound WhatsApp delivery is best effort in this reference product. A production channel should add a transactional outbox and channel idempotency keys so retries and process restarts do not duplicate or lose sends.
+
 ## Local Media
 
 Uploaded property media is stored under `runtime/media` by default. The database stores the file path and metadata, while the authenticated backend serves previews and the WhatsApp bridge reads the same local file. Deployments must persist and back up the runtime directory.
 
 ## Dashboard Authentication
 
-The dashboard uses a signed, expiring `HttpOnly` cookie for its single-user session. Password verification is constant-time, the cookie is `Secure` when enabled for HTTPS deployment, and bridge callbacks remain on their separate token-authenticated path.
+The dashboard uses a signed, expiring `HttpOnly` cookie for its single-user session. Password verification is constant-time, the cookie is `Secure` when enabled for HTTPS deployment, and bridge callbacks remain on their separate token-authenticated path. The bridge process also requires that token for non-health operations and refuses non-loopback bindings when no token is configured.
 
 ## Known Boundary
 

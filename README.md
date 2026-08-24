@@ -124,7 +124,8 @@ ACCESS_PASSWORD=choose-a-private-password
 SESSION_SECRET=generate-a-long-random-secret
 SESSION_TTL_SECONDS=86400
 AUTH_COOKIE_SECURE=true
-# Required when the WhatsApp bridge is enabled.
+# Required when the WhatsApp bridge is enabled. The bridge refuses non-loopback
+# bindings without this token.
 WHATSAPP_PA_BRIDGE_TOKEN=another-private-token
 ```
 
@@ -137,7 +138,9 @@ cd bridge
 npm run dev
 ```
 
-The WhatsApp bridge is optional and experimental. It depends on Baileys, whose optional link-preview path has an unresolved advisory (`GHSA-4gp8-rjrq-ch6q`) through `link-preview-js`. Prosper does not declare or call `link-preview-js` directly; the remaining Baileys advisory is accepted as non-blocking for this reference bridge and should be re-reviewed before production WhatsApp use.
+The WhatsApp bridge is optional and experimental. It is a reference adapter around Baileys, not an official or production-ready WhatsApp integration. Outbound delivery through the bridge is best effort: Prosper records attempted outbound actions, but a production channel should use a transactional outbox with channel idempotency keys before treating WhatsApp sends as durable side effects.
+
+The bridge depends on Baileys, whose optional link-preview path has an unresolved advisory (`GHSA-4gp8-rjrq-ch6q`) through `link-preview-js`. Prosper does not declare or call `link-preview-js` directly; the remaining Baileys advisory is accepted as non-blocking for this reference bridge and should be re-reviewed before production WhatsApp use.
 
 ## Verification
 
