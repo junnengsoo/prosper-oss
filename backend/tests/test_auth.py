@@ -11,8 +11,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 import app.auth as auth_module
-from app.database.connection import Base
-from app.main import app, get_session
+from app.database.connection import Base, get_session
+from app.main import app
 from app.database.seed import seed_all
 
 
