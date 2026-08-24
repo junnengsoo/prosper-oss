@@ -11,14 +11,8 @@ from sqlalchemy.orm import Session
 from .database.models import Contact, Conversation, Message, StageRun
 
 
-def status_label(value: object) -> str:
-    if value == "manual_review":
-        return "Manual Review"
-    return str(value if value is not None else "-").replace("_", " ")
-
-
 def badge(value: object, tone: str = "neutral") -> str:
-    text = escape(status_label(value))
+    text = escape(str(value if value is not None else "-"))
     return f'<span class="badge {tone}">{text}</span>'
 
 

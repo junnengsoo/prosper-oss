@@ -17,7 +17,7 @@ export function buildInboxRows(contacts: Contact[], conversations: Conversation[
     .filter(
       (conversation) =>
         conversation.source === "whatsapp" &&
-        (Boolean(conversation.matched_property_id) || conversation.status === "manual_review" || conversation.current_stage === "manual_review"),
+        (Boolean(conversation.matched_property_id) || conversation.current_stage === "manual_review"),
     )
     .map((conversation) => {
       const contact = contacts.find((item) => item.id === conversation.contact_id);
@@ -60,7 +60,7 @@ export function filterInboxRows(rows: InboxRow[], queueFilter: QueueFilter, quer
 export function queueActionForConversation(conversation: Conversation, contact?: Contact | null): QueueAction {
   if (contact?.status === "paused") return { label: "Paused", tone: "danger" };
   if (contact?.status === "ignored") return { label: "Ignored", tone: "danger" };
-  if (conversation.status === "manual_review" || conversation.current_stage === "manual_review") return { label: "Manual Review", tone: "warning" };
+  if (conversation.current_stage === "manual_review") return { label: "Manual Review", tone: "warning" };
   if (conversation.status === "closed") return { label: "Closed", tone: "neutral" };
   return { label: "Listing matched", tone: "success" };
 }

@@ -215,7 +215,7 @@ def test_api_malformed_matching_output_records_manual_review_without_outbound(ap
     assert outbound_texts(session, conversation.id) == []
     session.refresh(conversation)
     assert conversation.current_stage == "manual_review"
-    assert conversation.status == "manual_review"
+    assert conversation.status == "active"
 
 
 def test_api_schema_invalid_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
@@ -295,6 +295,7 @@ def test_api_unavailable_matched_listing_records_manual_review_without_bridge_re
     session.refresh(conversation)
     assert conversation.matched_property_id == property_.property_id
     assert conversation.current_stage == "manual_review"
+    assert conversation.status == "active"
 
 
 def test_api_schema_invalid_triage_records_manual_review_without_matching_or_outbound(api_client, session, monkeypatch):

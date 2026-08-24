@@ -183,8 +183,7 @@ def mark_conversation_manual_review(
     reason: str,
     output: dict[str, Any] | None = None,
 ) -> None:
-    """Move a conversation to Manual Review and persist an inspectable decision."""
-    conversation.status = MANUAL_REVIEW_STAGE
+    """Route a conversation to Manual Review and persist an inspectable decision."""
     conversation.current_stage = MANUAL_REVIEW_STAGE
     output_payload = output or {"stage_status": MANUAL_REVIEW_STAGE, "reason": reason}
     record_stage_run(

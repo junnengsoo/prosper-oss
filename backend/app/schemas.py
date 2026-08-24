@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 ContactStatus = Literal["active", "paused", "ignored"]
-ConversationStatus = Literal["active", "paused", "handover", "closed", "manual_review"]
+ConversationStatus = Literal["active", "paused", "handover", "closed"]
 MessageDirection = Literal["inbound", "outbound", "human"]
 MessageSource = Literal["whatsapp", "fake_chat"]
 MediaType = Literal["photo", "video"]

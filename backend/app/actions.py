@@ -358,9 +358,8 @@ async def execute_outbound_action_plan(session: Session, conversation_id: int, p
     conversation = session.get(Conversation, conversation_id)
     if not conversation:
         return pipeline_result
-    if _requires_manual_review(pipeline_result) or conversation.current_stage == "manual_review" or conversation.status == "manual_review":
+    if _requires_manual_review(pipeline_result) or conversation.current_stage == "manual_review":
         reason = _manual_review_reason(pipeline_result)
-        conversation.status = "manual_review"
         conversation.current_stage = "manual_review"
         pipeline_result["send_result"] = {"status": "manual_review", "reason": reason}
         _record_outbound_action_audit(session, conversation, pipeline_result)
