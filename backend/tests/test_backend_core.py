@@ -6,6 +6,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +21,7 @@ from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
 from app.schemas import BridgeInboundMessage, ConversationStageUpdate, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
 from app.database.seed import seed_all
+import app.pipeline as pipeline_module
 from app.services import (
     append_message,
     delete_properties,
@@ -119,6 +121,24 @@ def outbound_texts(session, conversation_id: int) -> list[str]:
     ]
 
 
+@pytest.fixture
+def api_client(session, monkeypatch):
+    import app.main as main_module
+
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
+    get_settings.cache_clear()
+
+    def override_session():
+        yield session
+
+    main_module.app.dependency_overrides[main_module.get_session] = override_session
+    try:
+        yield TestClient(main_module.app)
+    finally:
+        main_module.app.dependency_overrides.pop(main_module.get_session, None)
+        get_settings.cache_clear()
+
+
 def matched_listing_result(property_id: str = "RTF-001") -> dict:
     return {
         "rental_listing_matching": {
@@ -128,6 +148,188 @@ def matched_listing_result(property_id: str = "RTF-001") -> dict:
             "reason": "matched test property",
         }
     }
+
+
+def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, session, monkeypatch):
+    import app.main as main_module
+
+    property_ = add_property(session, "RTF-001")
+    upsert_property_playbook(
+        session,
+        property_.property_id,
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Hi {property_name}"}]),
+    )
+    conversation = add_fake_conversation(session, text="Hi, is 301C still available?")
+    session.commit()
+
+    async def generator(messages):
+        return {
+            "match_status": "matched",
+            "mentioned_property_raw": "301C",
+            "mentioned_listing_url": "",
+            "extracted_listing_id": "",
+            "matched_by": "property_name",
+            "matched_properties": [{"property_id": property_.property_id, "property_name": property_.property_name, "reason": "301C"}],
+            "reason": "single configured listing match",
+        }
+
+    async def route_with_generator(session_arg, conversation_id):
+        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+
+    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+
+    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["send_result"]["status"] == "sent"
+    assert outbound_texts(session, conversation.id) == ["Hi 301C Punggol Central"]
+
+
+def test_api_malformed_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
+    import app.main as main_module
+
+    property_ = add_property(session, "RTF-001")
+    upsert_property_playbook(
+        session,
+        property_.property_id,
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Hi {property_name}"}]),
+    )
+    conversation = add_fake_conversation(session, text="Hi, is 301C still available?")
+    session.commit()
+
+    async def generator(messages):
+        raise json.JSONDecodeError("bad json", "not json", 0)
+
+    async def route_with_generator(session_arg, conversation_id):
+        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+
+    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+
+    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["rental_listing_matching"]["match_status"] == "manual_review"
+    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert outbound_texts(session, conversation.id) == []
+    session.refresh(conversation)
+    assert conversation.current_stage == "manual_review"
+    assert conversation.status == "active"
+
+
+def test_api_schema_invalid_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
+    import app.main as main_module
+
+    property_ = add_property(session, "RTF-001")
+    upsert_property_playbook(
+        session,
+        property_.property_id,
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Hi {property_name}"}]),
+    )
+    conversation = add_fake_conversation(session, text="Hi, is 301C still available?")
+    session.commit()
+
+    async def generator(messages):
+        return {
+            "match_status": "matched",
+            "mentioned_property_raw": "301C",
+            "matched_by": "property_name",
+            "matched_properties": [],
+            "reason": "claims a match without a property",
+        }
+
+    async def route_with_generator(session_arg, conversation_id):
+        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+
+    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+
+    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["rental_listing_matching"]["match_status"] == "manual_review"
+    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert outbound_texts(session, conversation.id) == []
+
+
+def test_api_unavailable_matched_listing_records_manual_review_without_bridge_request(api_client, session, monkeypatch):
+    import app.main as main_module
+
+    property_ = add_property(session, "RTF-001", status="unavailable")
+    upsert_property_playbook(
+        session,
+        property_.property_id,
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Hi {property_name}"}]),
+    )
+    conversation = add_whatsapp_conversation(session, text="Hi, is 301C still available?")
+    session.commit()
+
+    async def generator(messages):
+        return {
+            "match_status": "matched",
+            "mentioned_property_raw": "301C",
+            "mentioned_listing_url": "",
+            "extracted_listing_id": "",
+            "matched_by": "property_name",
+            "matched_properties": [{"property_id": property_.property_id, "property_name": property_.property_name, "reason": "301C"}],
+            "reason": "single configured listing match",
+        }
+
+    async def route_with_generator(session_arg, conversation_id):
+        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+
+    async def fail_if_bridge_called(chat_jid: str, text: str, bridge_base_url: str | None = None) -> str:
+        raise AssertionError("bridge delivery must not be attempted for unavailable listings")
+
+    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+    monkeypatch.setattr("app.actions.send_via_bridge", fail_if_bridge_called)
+
+    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["rental_listing_matching"]["match_status"] == "manual_review"
+    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert outbound_texts(session, conversation.id) == []
+    session.refresh(conversation)
+    assert conversation.matched_property_id == property_.property_id
+    assert conversation.current_stage == "manual_review"
+    assert conversation.status == "active"
+
+
+def test_api_schema_invalid_triage_records_manual_review_without_matching_or_outbound(api_client, session, monkeypatch):
+    import app.main as main_module
+
+    async def triage_with_invalid_schema(session_arg, thread, generator=..., conversation_id=None, persist_input_snapshot=True):
+        async def generator(messages):
+            return {"is_initial_rental_enquiry": True, "confidence": "maybe", "reason": "invalid confidence"}
+
+        return await pipeline_module.run_triage_text(
+            session_arg,
+            thread,
+            generator,
+            conversation_id=conversation_id,
+            persist_input_snapshot=persist_input_snapshot,
+        )
+
+    async def fail_if_matching_runs(session_arg, conversation_id):
+        raise AssertionError("listing matching must not run after invalid triage")
+
+    monkeypatch.setattr(main_module, "run_triage_text", triage_with_invalid_schema)
+    monkeypatch.setattr(main_module, "run_rental_listing_matching_pipeline", fail_if_matching_runs)
+
+    response = api_client.post(
+        "/api/fake-chat/inbound-and-run",
+        json={"chat_jid": "triage-invalid@s.whatsapp.net", "text": "Hi 301C?", "display_name": "Invalid Triage"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result"]["triage"]["stage_status"] == "manual_review"
+    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert payload["conversation_id"] is not None
+    assert outbound_texts(session, payload["conversation_id"]) == []
 
 
 def test_playbook_crud(session):
