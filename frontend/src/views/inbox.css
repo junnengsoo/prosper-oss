@@ -1,0 +1,262 @@
+.inboxLayout {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  min-height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+.leadListPane {
+  background: #fff;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.leadListPane > .searchBox {
+  margin: 14px 16px;
+}
+
+.filterChips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 16px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filterChips button,
+.leadActions button,
+.matchedPropertyCard button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-weight: 800;
+  color: #222;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.filterChips button.active {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+
+.leadList {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.leadRow {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-left: 3px solid transparent;
+  background: #fff;
+  text-align: left;
+  padding: 16px 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.leadRow.active {
+  border-left-color: #000;
+  background: var(--surface-low);
+}
+
+.leadRowTop,
+.leadProperty,
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.leadRowTop {
+  justify-content: space-between;
+}
+
+.leadRow p {
+  margin: 0;
+  color: #4d5356;
+  font-size: 13px;
+}
+
+.leadProperty {
+  color: #4d5356;
+  font-size: 12px;
+}
+
+.dot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: #aeb4b6;
+}
+
+.dot.success {
+  background: var(--green-dark);
+}
+
+.dot.danger {
+  background: var(--danger);
+}
+
+.leadDetailPane {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 22px 26px 90px;
+}
+
+.leadHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leadHeader h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.leadHeader span,
+.matchedPropertyCard span,
+.auditCard p,
+.timelineList span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.leadActions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.leadSummaryGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  gap: 16px;
+  margin: 22px 0;
+}
+
+.matchedPropertyCard,
+.auditCard {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 16px;
+}
+
+.matchedPropertyCard {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.matchedPropertyCard strong,
+.matchedPropertyCard b {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.auditCard {
+  display: grid;
+  gap: 12px;
+}
+
+.cardTitle {
+  justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.timelineList {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.timelineList div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+}
+
+@media (max-width: 1200px) {
+  .leadSummaryGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .inboxLayout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .leadListPane {
+    max-height: 230px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .leadListPane > .searchBox {
+    margin: 10px 12px;
+  }
+
+  .filterChips {
+    padding: 0 12px 10px;
+  }
+
+  .leadDetailPane {
+    padding: 16px 14px 40px;
+  }
+
+  .leadHeader {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .leadActions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .leadActions button {
+    flex: 1 1 130px;
+  }
+
+  .leadSummaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .matchedPropertyCard {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .matchedPropertyCard button {
+    grid-column: 1 / -1;
+  }
+
+  .timelineList div {
+    display: grid;
+    gap: 3px;
+  }
+}
