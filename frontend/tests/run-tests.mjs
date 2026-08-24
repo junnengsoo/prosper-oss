@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const testDir = dirname(fileURLToPath(import.meta.url));
-const tsxBin = join(testDir, "../../bridge/node_modules/.bin/tsx");
+const tsxBin = join(testDir, "../node_modules/.bin/tsx");
 const testFiles = readdirSync(testDir)
   .filter((file) => file.endsWith(".test.ts"))
   .sort();
