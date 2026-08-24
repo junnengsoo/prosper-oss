@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from app.actions import execute_outbound_action_plan, plan_outbound_actions
 from app.auth import CurrentUser, RequestContext, current_user_from_session
 from app.config import get_settings
-from app.database.connection import Base
+from app.database.connection import Base, get_session
 from app.database.models import Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
@@ -131,11 +131,11 @@ def api_client(session, monkeypatch):
     def override_session():
         yield session
 
-    main_module.app.dependency_overrides[main_module.get_session] = override_session
+    main_module.app.dependency_overrides[get_session] = override_session
     try:
         yield TestClient(main_module.app)
     finally:
-        main_module.app.dependency_overrides.pop(main_module.get_session, None)
+        main_module.app.dependency_overrides.pop(get_session, None)
         get_settings.cache_clear()
 
 
@@ -151,7 +151,7 @@ def matched_listing_result(property_id: str = "RTF-001") -> dict:
 
 
 def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, session, monkeypatch):
-    import app.main as main_module
+    import app.routers.conversations as conversations_router
 
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(
@@ -176,7 +176,7 @@ def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, sess
     async def route_with_generator(session_arg, conversation_id):
         return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
 
-    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
 
     response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
 
@@ -187,7 +187,7 @@ def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, sess
 
 
 def test_api_malformed_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
-    import app.main as main_module
+    import app.routers.conversations as conversations_router
 
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(
@@ -204,7 +204,7 @@ def test_api_malformed_matching_output_records_manual_review_without_outbound(ap
     async def route_with_generator(session_arg, conversation_id):
         return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
 
-    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
 
     response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
 
@@ -219,7 +219,7 @@ def test_api_malformed_matching_output_records_manual_review_without_outbound(ap
 
 
 def test_api_schema_invalid_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
-    import app.main as main_module
+    import app.routers.conversations as conversations_router
 
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(
@@ -242,7 +242,7 @@ def test_api_schema_invalid_matching_output_records_manual_review_without_outbou
     async def route_with_generator(session_arg, conversation_id):
         return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
 
-    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
 
     response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
 
@@ -254,7 +254,7 @@ def test_api_schema_invalid_matching_output_records_manual_review_without_outbou
 
 
 def test_api_unavailable_matched_listing_records_manual_review_without_bridge_request(api_client, session, monkeypatch):
-    import app.main as main_module
+    import app.routers.conversations as conversations_router
 
     property_ = add_property(session, "RTF-001", status="unavailable")
     upsert_property_playbook(
@@ -282,7 +282,7 @@ def test_api_unavailable_matched_listing_records_manual_review_without_bridge_re
     async def fail_if_bridge_called(chat_jid: str, text: str, bridge_base_url: str | None = None) -> str:
         raise AssertionError("bridge delivery must not be attempted for unavailable listings")
 
-    monkeypatch.setattr(main_module, "route_stored_conversation_after_inbound", route_with_generator)
+    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
     monkeypatch.setattr("app.actions.send_via_bridge", fail_if_bridge_called)
 
     response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
@@ -299,7 +299,7 @@ def test_api_unavailable_matched_listing_records_manual_review_without_bridge_re
 
 
 def test_api_schema_invalid_triage_records_manual_review_without_matching_or_outbound(api_client, session, monkeypatch):
-    import app.main as main_module
+    import app.routers.simulator as simulator_router
 
     async def triage_with_invalid_schema(session_arg, thread, generator=..., conversation_id=None, persist_input_snapshot=True):
         async def generator(messages):
@@ -316,8 +316,8 @@ def test_api_schema_invalid_triage_records_manual_review_without_matching_or_out
     async def fail_if_matching_runs(session_arg, conversation_id):
         raise AssertionError("listing matching must not run after invalid triage")
 
-    monkeypatch.setattr(main_module, "run_triage_text", triage_with_invalid_schema)
-    monkeypatch.setattr(main_module, "run_rental_listing_matching_pipeline", fail_if_matching_runs)
+    monkeypatch.setattr(simulator_router, "run_triage_text", triage_with_invalid_schema)
+    monkeypatch.setattr(simulator_router, "run_rental_listing_matching_pipeline", fail_if_matching_runs)
 
     response = api_client.post(
         "/api/fake-chat/inbound-and-run",
@@ -431,7 +431,7 @@ def test_media_upload_route_stores_and_serves_runtime_file(session, monkeypatch,
     def override_session():
         yield session
 
-    main_module.app.dependency_overrides[main_module.get_session] = override_session
+    main_module.app.dependency_overrides[get_session] = override_session
     try:
         client = TestClient(main_module.app)
         uploaded = client.post(
@@ -453,34 +453,34 @@ def test_media_upload_route_stores_and_serves_runtime_file(session, monkeypatch,
         assert not media_path.exists()
         assert session.get(PropertyMedia, media["id"]) is None
     finally:
-        main_module.app.dependency_overrides.pop(main_module.get_session, None)
+        main_module.app.dependency_overrides.pop(get_session, None)
         get_settings.cache_clear()
 
 
 def test_whatsapp_connection_proxy_states_and_reconnect(session, monkeypatch):
-    import app.main as main_module
+    import app.routers.config_runtime as config_runtime_router
 
     context = RequestContext(user=CurrentUser(auth_user_id="dev-user", email="dev@local.test"), role="owner")
 
     async def fake_connected_status(bridge_base_url=None):
         return {"available": True, "ok": True, "connection": "open", "last_connection_event_at": "2026-07-19T09:00:00Z"}
 
-    monkeypatch.setattr(main_module, "fetch_bridge_status", fake_connected_status)
-    connected = asyncio.run(main_module.whatsapp_connection(_context=context))
+    monkeypatch.setattr(config_runtime_router, "fetch_bridge_status", fake_connected_status)
+    connected = asyncio.run(config_runtime_router.whatsapp_connection(_context=context))
     assert connected["state"] == "connected"
 
     async def fake_offline_status(bridge_base_url=None):
         return {"available": False, "ok": False, "status": "bridge_offline", "detail": "connection refused"}
 
-    monkeypatch.setattr(main_module, "fetch_bridge_status", fake_offline_status)
-    offline = asyncio.run(main_module.whatsapp_connection(_context=context))
+    monkeypatch.setattr(config_runtime_router, "fetch_bridge_status", fake_offline_status)
+    offline = asyncio.run(config_runtime_router.whatsapp_connection(_context=context))
     assert offline["state"] == "bridge_offline"
 
     async def fake_qr(bridge_base_url=None):
         return {"available": True, "ok": True, "status": "qr_available", "qr_data_url": "data:image/png;base64,abc"}
 
-    monkeypatch.setattr(main_module, "fetch_bridge_pairing_qr", fake_qr)
-    qr = asyncio.run(main_module.whatsapp_pairing_qr(session=session, context=context))
+    monkeypatch.setattr(config_runtime_router, "fetch_bridge_pairing_qr", fake_qr)
+    qr = asyncio.run(config_runtime_router.whatsapp_pairing_qr(session=session, context=context))
     assert qr["state"] == "qr_available"
     assert qr["qr_data_url"] == "data:image/png;base64,abc"
 
@@ -493,9 +493,9 @@ def test_whatsapp_connection_proxy_states_and_reconnect(session, monkeypatch):
         reconnect_calls.append(clear_auth)
         return {"available": True, "ok": True, "status": "reconnecting"}
 
-    monkeypatch.setattr(main_module, "fetch_bridge_status", fake_needs_reauth_status)
-    monkeypatch.setattr(main_module, "request_bridge_reconnect", fake_reconnect)
-    reconnect = asyncio.run(main_module.whatsapp_reconnect(session=session, context=context))
+    monkeypatch.setattr(config_runtime_router, "fetch_bridge_status", fake_needs_reauth_status)
+    monkeypatch.setattr(config_runtime_router, "request_bridge_reconnect", fake_reconnect)
+    reconnect = asyncio.run(config_runtime_router.whatsapp_reconnect(session=session, context=context))
     assert reconnect["state"] == "reconnecting"
     assert reconnect["clear_auth"] is True
     assert reconnect_calls == [True]
@@ -540,7 +540,8 @@ def test_removed_extra_contract_shapes_are_rejected():
 
 def test_playbook_routes_get_put_validate_and_export(session):
     from fastapi import HTTPException
-    from app.main import export_config, get_property_playbook_route, put_property_playbook_route
+    from app.routers.config_runtime import export_config
+    from app.routers.listings import get_property_playbook_route, put_property_playbook_route
 
     property_ = add_property(session, "RTF-001")
     session.commit()
@@ -869,7 +870,7 @@ def test_available_pipeline_sends_listing_reply_and_media(session):
 
 
 def test_triage_enquiry_key_accepts_property_and_legacy_rental_outputs():
-    from app.main import triage_is_initial_enquiry
+    from app.router_support import triage_is_initial_enquiry
 
     assert triage_is_initial_enquiry({"is_initial_rental_enquiry": True}) is True
     assert triage_is_initial_enquiry({"stage_status": "manual_review"}) is False
