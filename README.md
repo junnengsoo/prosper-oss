@@ -88,14 +88,13 @@ Live model evaluations are separate from the deterministic test suite because th
 
 ## Local Setup
 
-Requirements: Python 3.11+, `uv`, Node.js, and npm.
+Requirements: Python 3.11, `uv`, Node.js 22, and npm.
 
 ```bash
 cp .env.example .env
-uv venv --python 3.11 .venv
-uv pip install -e '.[dev]'
-cd frontend && npm install
-cd ../bridge && npm install
+uv sync --locked --extra dev --python 3.11
+cd frontend && npm ci
+cd ../bridge && npm ci
 cd ..
 ```
 
@@ -139,9 +138,11 @@ cd bridge
 npm run dev
 ```
 
+The WhatsApp bridge is optional and experimental. It depends on Baileys, whose optional link-preview path has an unresolved advisory (`GHSA-4gp8-rjrq-ch6q`) through `link-preview-js`. Prosper does not declare or call `link-preview-js` directly; the remaining Baileys advisory is accepted as non-blocking for this reference bridge and should be re-reviewed before production WhatsApp use.
+
 ## Verification
 
-Run the repository checks:
+Run the repository checks from a clean checkout:
 
 ```bash
 scripts/test.sh

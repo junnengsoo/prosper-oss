@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT_DIR"
 
+PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
+
+echo "Installing backend dependencies"
+uv sync --locked --extra dev --python "$PYTHON_VERSION"
+
 echo "Running backend tests"
 .venv/bin/python -m pytest backend/tests
 
@@ -25,6 +30,7 @@ scripts/legacy_surface_check.py
 echo "Building frontend"
 (
   cd frontend
+  npm ci
   npm run build
 )
 
@@ -37,6 +43,7 @@ echo "Testing frontend"
 echo "Typechecking bridge"
 (
   cd bridge
+  npm ci
   npm run typecheck
 )
 
