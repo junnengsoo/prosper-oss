@@ -40,6 +40,9 @@ echo "Testing frontend"
   npm run test
 )
 
+echo "Running full-stack browser acceptance"
+INSTALL_DEPS=0 scripts/acceptance.sh
+
 echo "Typechecking bridge"
 (
   cd bridge

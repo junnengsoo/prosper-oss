@@ -1622,3 +1622,313 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 760px) {
+  :root {
+    --rail: 60px;
+  }
+
+  body {
+    min-width: 0;
+  }
+
+  .sideRail {
+    gap: 10px;
+    padding: 12px 0;
+  }
+
+  .brandMark {
+    margin-bottom: 8px;
+  }
+
+  .navItem,
+  .accountRail {
+    min-height: 52px;
+    font-size: 10px;
+  }
+
+  .topBar {
+    height: auto;
+    min-height: 64px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .topTitle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .topTitle h1 {
+    font-size: 20px;
+  }
+
+  .topTitle span {
+    display: none;
+  }
+
+  .topActions {
+    width: 100%;
+    max-width: 100%;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .statusPill {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .appContentFrame,
+  .appFrame {
+    min-width: 0;
+  }
+
+  .inboxLayout,
+  .simulatorLayout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .leadListPane,
+  .simListPane {
+    max-height: 230px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .leadListPane > .searchBox {
+    margin: 10px 12px;
+  }
+
+  .filterChips {
+    padding: 0 12px 10px;
+  }
+
+  .leadDetailPane {
+    padding: 16px 14px 40px;
+  }
+
+  .leadHeader {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .leadActions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .leadActions button {
+    flex: 1 1 130px;
+  }
+
+  .leadSummaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .matchedPropertyCard {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .matchedPropertyCard button {
+    grid-column: 1 / -1;
+  }
+
+  .timelineList div {
+    display: grid;
+    gap: 3px;
+  }
+
+  .bubble {
+    max-width: 92%;
+  }
+
+  .propertiesPage {
+    padding: 14px;
+  }
+
+  .pageToolbar,
+  .toolbarLeft,
+  .toolbarActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbarLeft,
+  .toolbarActions {
+    gap: 10px;
+  }
+
+  .toolbarLeft .searchBox {
+    width: 100%;
+  }
+
+  .bulkActionBar,
+  .listingActions,
+  .listingTop,
+  .listingTop p {
+    flex-wrap: wrap;
+  }
+
+  .listingCard {
+    grid-template-columns: 1fr;
+  }
+
+  .listingImage {
+    min-height: 130px;
+  }
+
+  .listingBody {
+    padding: 14px;
+  }
+
+  .listingPrice {
+    width: 100%;
+    text-align: left;
+  }
+
+  .listingMeta {
+    grid-template-columns: 1fr;
+  }
+
+  .listingActions {
+    justify-content: stretch;
+  }
+
+  .listingActions button,
+  .listingSelect {
+    flex: 1 1 120px;
+  }
+
+  .propertyEditorPage {
+    min-height: 0;
+  }
+
+  .editorHeader {
+    height: auto;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .editorHeaderActions {
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .editorHeaderActions button,
+  .editorHeader > button {
+    flex: 1 1 120px;
+  }
+
+  .editorLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionNav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+
+  .sectionNav strong {
+    display: none;
+  }
+
+  .sectionNav button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    gap: 10px;
+  }
+
+  .editorContent {
+    padding: 16px;
+  }
+
+  .editorPanel {
+    gap: 18px;
+  }
+
+  .formGrid,
+  .galleryGrid,
+  .autoRepliesLayout,
+  .autoRepliesHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineForm,
+  .autoReplyDelay,
+  .placeholderRow {
+    flex-wrap: wrap;
+  }
+
+  .autoReplyDelay .iconButton {
+    margin-left: 0;
+  }
+
+  .autoPreviewPane {
+    position: static;
+  }
+
+  .autoPreviewPane .phoneShell {
+    width: min(100%, 300px);
+    justify-self: center;
+  }
+
+  .simListPane {
+    padding: 12px;
+  }
+
+  .simHeader {
+    margin-bottom: 10px;
+  }
+
+  .simConfig {
+    grid-template-columns: 1fr;
+    margin-bottom: 10px;
+  }
+
+  .simList {
+    max-height: 76px;
+    overflow-y: auto;
+  }
+
+  .simChatPane {
+    min-height: 520px;
+  }
+
+  .chatComposer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .composerStatus {
+    display: none;
+  }
+
+  .phoneShell,
+  .connectionModal {
+    width: min(100%, calc(100vw - var(--rail) - 24px));
+  }
+
+  h1,
+  h2,
+  strong,
+  p,
+  span,
+  button,
+  input,
+  textarea {
+    overflow-wrap: anywhere;
+  }
+}
