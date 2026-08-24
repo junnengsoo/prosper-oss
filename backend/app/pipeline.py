@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from .llm import LlmMessage, LlmNotConfiguredError, LlmProviderError, generate_json
 from .database.models import Contact, Conversation, Message, Property, StageRun
-from .property_context import render_property_facts
 from .prompts import get_prompt
 from .services import is_ai_paused
 
