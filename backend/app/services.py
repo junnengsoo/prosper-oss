@@ -45,6 +45,11 @@ def timestamp_to_datetime(timestamp_ms: int | None) -> datetime | None:
     return datetime.fromtimestamp(timestamp_ms / 1000)
 
 
+def bridge_auth_headers() -> dict[str, str]:
+    token = get_settings().whatsapp_pa_bridge_token.strip()
+    return {"x-whatsapp-bridge-token": token} if token else {}
+
+
 def get_or_create_contact(
     session: Session,
     chat_jid: str,
@@ -534,7 +539,7 @@ async def post_bridge_send_with_retry(payload: dict[str, object], timeout: int, 
     for attempt in range(len(BRIDGE_SEND_RETRY_DELAYS_SECONDS) + 1):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(f"{base_url}/send", json=payload)
+                response = await client.post(f"{base_url}/send", json=payload, headers=bridge_auth_headers())
                 raise_bridge_status(response)
                 return response
         except Exception as error:
@@ -575,7 +580,7 @@ async def fetch_bridge_status(bridge_base_url: str | None = None) -> dict[str, o
     url = f"{base_url}/status"
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            response = await client.get(url)
+            response = await client.get(url, headers=bridge_auth_headers())
             response.raise_for_status()
         body = response.json()
         if isinstance(body, dict):
@@ -596,7 +601,7 @@ async def fetch_bridge_pairing_qr(bridge_base_url: str | None = None) -> dict[st
     url = f"{base_url}/pairing/qr"
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            response = await client.get(url)
+            response = await client.get(url, headers=bridge_auth_headers())
         body = response.json()
         if isinstance(body, dict):
             return {"available": True, "http_status": response.status_code, **body}
@@ -617,7 +622,7 @@ async def request_bridge_reconnect(bridge_base_url: str | None = None, clear_aut
     url = f"{base_url}/pairing/reconnect"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(url, json={"clear_auth": clear_auth})
+            response = await client.post(url, json={"clear_auth": clear_auth}, headers=bridge_auth_headers())
         body = response.json()
         if isinstance(body, dict):
             return {"available": True, "http_status": response.status_code, **body}

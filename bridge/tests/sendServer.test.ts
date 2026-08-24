@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { handleSendPayload, type SendSocket } from "../src/sendServer.js";
+import { assertBridgeStartupSafe, bridgeTokenMatches, handleSendPayload, type SendSocket } from "../src/sendServer.js";
 
 type SendCall = {
   chatJid: string;
@@ -121,6 +121,19 @@ function fakeSocket(calls: SendCall[], presenceCalls: PresenceCall[] = []): Send
   assert.equal(result.statusCode, 400);
   assert.deepEqual(result.body, { error: "text or valid media_type/file_path is required" });
   assert.deepEqual(calls, []);
+}
+
+{
+  assert.equal(bridgeTokenMatches("secret-token", "secret-token"), true);
+  assert.equal(bridgeTokenMatches("", "secret-token"), false);
+  assert.equal(bridgeTokenMatches("wrong-token", "secret-token"), false);
+  assert.equal(bridgeTokenMatches("short", "secret-token"), false);
+  assert.doesNotThrow(() => assertBridgeStartupSafe("127.0.0.1", ""));
+  assert.doesNotThrow(() => assertBridgeStartupSafe("0.0.0.0", "configured-token"));
+  assert.throws(
+    () => assertBridgeStartupSafe("0.0.0.0", ""),
+    /WHATSAPP_PA_BRIDGE_TOKEN is required/,
+  );
 }
 
 console.log("bridge send server tests passed");

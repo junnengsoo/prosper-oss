@@ -663,8 +663,8 @@ def test_bridge_send_retries_when_bridge_temporarily_not_connected(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def post(self, url, json):
-            calls.append({"url": url, "json": json})
+        async def post(self, url, json, headers=None):
+            calls.append({"url": url, "json": json, "headers": headers})
             request = httpx.Request("POST", url)
             if len(calls) == 1:
                 return httpx.Response(503, request=request, text='{"error":"not_connected","connection":"close"}')
@@ -675,11 +675,61 @@ def test_bridge_send_retries_when_bridge_temporarily_not_connected(monkeypatch):
 
     monkeypatch.setattr("app.services.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("app.services.asyncio.sleep", fake_sleep)
+    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "backend-secret")
+    get_settings.cache_clear()
 
-    response = asyncio.run(post_bridge_send_with_retry({"chat_jid": "tenant@lid", "text": "Hi"}, timeout=30, bridge_base_url="http://bridge.test"))
+    try:
+        response = asyncio.run(post_bridge_send_with_retry({"chat_jid": "tenant@lid", "text": "Hi"}, timeout=30, bridge_base_url="http://bridge.test"))
+    finally:
+        get_settings.cache_clear()
 
     assert response.json()["message_id"] == "retry-ok"
     assert len(calls) == 2
+    assert calls[0]["headers"]["x-whatsapp-bridge-token"] == "backend-secret"
+    assert calls[1]["headers"]["x-whatsapp-bridge-token"] == "backend-secret"
+
+
+def test_backend_bridge_proxy_requests_attach_configured_token(monkeypatch):
+    from app.services import fetch_bridge_pairing_qr, fetch_bridge_status, request_bridge_reconnect
+
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, headers=None):
+            calls.append({"method": "GET", "url": url, "headers": headers})
+            request = httpx.Request("GET", url)
+            return httpx.Response(200, request=request, json={"ok": True})
+
+        async def post(self, url, json, headers=None):
+            calls.append({"method": "POST", "url": url, "json": json, "headers": headers})
+            request = httpx.Request("POST", url)
+            return httpx.Response(202, request=request, json={"ok": True, "status": "reconnecting"})
+
+    monkeypatch.setattr("app.services.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "backend-secret")
+    get_settings.cache_clear()
+    try:
+        assert asyncio.run(fetch_bridge_status("http://bridge.test"))["ok"] is True
+        assert asyncio.run(fetch_bridge_pairing_qr("http://bridge.test"))["ok"] is True
+        assert asyncio.run(request_bridge_reconnect("http://bridge.test", clear_auth=True))["ok"] is True
+    finally:
+        get_settings.cache_clear()
+
+    assert [call["url"] for call in calls] == [
+        "http://bridge.test/status",
+        "http://bridge.test/pairing/qr",
+        "http://bridge.test/pairing/reconnect",
+    ]
+    assert all(call["headers"]["x-whatsapp-bridge-token"] == "backend-secret" for call in calls)
 
 
 def test_mvp_available_pipeline_sends_profile_form_and_media_without_qualification(session):

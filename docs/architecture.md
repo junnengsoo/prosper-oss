@@ -12,7 +12,7 @@ Prosper is organized around a shared backend workflow with separate channel and 
 - `backend/app/services.py` owns message ingestion, deduplication, state checks, and bridge retries.
 - `backend/app/media_storage.py` stores uploaded property media under the configured runtime directory and serves it through the authenticated API.
 - `frontend/` provides the inbox, configuration screens, audit views, and fake-chat simulator.
-- `bridge/` adapts Baileys WhatsApp events into the backend message contract and forwards outbound actions.
+- `bridge/` is an optional, experimental Baileys adapter that maps WhatsApp events into the backend message contract and forwards outbound actions on a best-effort basis.
 - `backend/app/auth.py` protects the dashboard with a signed single-user session cookie; bridge requests use a separate bridge token.
 
 ## Processing Flow
@@ -25,6 +25,6 @@ Prosper is organized around a shared backend workflow with separate channel and 
 6. A deterministic action planner decides whether a reply, media action, handoff, or no action is allowed.
 7. The selected channel executes the action and records the result.
 
-Dashboard requests authenticate through `/api/auth/login`, `/api/auth/session`, and `/api/auth/logout`. The cookie is only for the browser dashboard. It is not required for bridge callbacks, which use their own machine-to-machine headers.
+Dashboard requests authenticate through `/api/auth/login`, `/api/auth/session`, and `/api/auth/logout`. The cookie is only for the browser dashboard. It is not required for bridge callbacks, which use their own machine-to-machine bridge token. Backend-to-bridge operations use the same token for status, QR, reconnect, text, and media requests; the bridge health check remains unauthenticated for local process supervision.
 
 The model proposes structured facts and decisions. Qualification may generate the next tenant-facing question, but the bounded loop validates and records it before the action layer sends it.

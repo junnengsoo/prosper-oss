@@ -35,7 +35,7 @@ import {
   type NormalizedMessage,
 } from "./normalize.js";
 import { pairingStatus, renderQrDataUrl } from "./pairing.js";
-import { handleSendPayload, readJsonBody, sendJson } from "./sendServer.js";
+import { assertBridgeStartupSafe, createBridgeHttpServer } from "./sendServer.js";
 
 type ConsoleMethod = (...args: unknown[]) => void;
 
@@ -122,20 +122,18 @@ let badSessionRequiresReauthCount = 0;
 const RECENT_MESSAGE_STORE_LIMIT = 500;
 const MAX_BAD_SESSION_RECONNECTS_BEFORE_OPEN = 1;
 
-function textPreview(text: string, limit = 120): string {
-  const compact = text.replace(/\s+/g, " ").trim();
-  if (compact.length <= limit) return compact;
-  return `${compact.slice(0, limit - 1)}…`;
-}
-
 function recordDroppedMessage(reason: MessageDropReason | "normalize_failed", message?: NormalizedMessage): void {
   lastDroppedMessageAt = new Date().toISOString();
   droppedMessageCounts[reason] = (droppedMessageCounts[reason] ?? 0) + 1;
   if (message) {
     console.log(
-      `[bridge] dropped inbound message reason=${reason} chat=${message.chatJid} fromMe=${message.fromMe} type=${message.rawType} text_preview=${JSON.stringify(textPreview(message.text))}`,
+      `[bridge] dropped inbound message reason=${reason} chat=${message.chatJid} fromMe=${message.fromMe} type=${message.rawType} text_len=${message.text.length}`,
     );
   }
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : "Error";
 }
 
 function bridgeStatus(): Record<string, unknown> {
@@ -556,86 +554,51 @@ async function reconnectSocket(clearAuth = false): Promise<void> {
 function startSendServer(): void {
   if (sendServer) return;
 
-  sendServer = http.createServer((request, response) => {
-    if (request.method === "GET" && (request.url === "/health" || request.url === "/status")) {
-      sendJson(response, 200, bridgeStatus());
-      return;
-    }
-
-    if (request.method === "GET" && request.url === "/pairing/qr") {
-      void pairingQrPayload()
-        .then((payload) => sendJson(response, payload.ok ? 200 : 404, payload))
-        .catch((error) => sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) }));
-      return;
-    }
-
-    if (request.method === "POST" && request.url === "/pairing/reconnect") {
-      void readJsonBody(request)
-        .then(async (body) => {
-          await reconnectSocket(body.clear_auth === true);
-          sendJson(response, 202, {
-            ok: true,
-            status: "reconnecting",
-            clear_auth: body.clear_auth === true,
-            socket_generation: socketGeneration,
-          });
-        })
-        .catch((error) => {
-          sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
-        });
-      return;
-    }
-
-    if (request.method !== "POST" || request.url !== "/send") {
-      sendJson(response, 404, { error: "not_found" });
-      return;
-    }
-
-    void readJsonBody(request)
-      .then(async (body) => {
-        sendRequestCount += 1;
-        lastSendRequestAt = new Date().toISOString();
-        lastSendSummary = {
-          chat_jid: typeof body.chat_jid === "string" ? body.chat_jid : "",
-          has_text: typeof body.text === "string" && body.text.trim().length > 0,
-          media_type: typeof body.media_type === "string" ? body.media_type : "",
-          socket_generation: socketGeneration,
-          connection: connectionStatus,
-        };
-        if (!currentSock) {
-          sendFailureCount += 1;
-          lastSendFailureAt = new Date().toISOString();
-          lastSendError = "not_connected";
-          sendJson(response, 503, { error: "not_connected", connection: connectionStatus });
-          return;
-        }
-        const result = await handleSendPayload(currentSock, body);
-        if (result.statusCode >= 200 && result.statusCode < 300) {
-          sendSuccessCount += 1;
-          lastSendSuccessAt = new Date().toISOString();
-          lastSendError = null;
-        } else {
-          sendFailureCount += 1;
-          lastSendFailureAt = new Date().toISOString();
-          lastSendError = JSON.stringify(result.body);
-        }
-        sendJson(response, result.statusCode, result.body);
-      })
-      .catch((error) => {
-        const errorName = error instanceof Error ? error.name : "Error";
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorStack = error instanceof Error ? (error.stack ?? "") : "";
+  sendServer = createBridgeHttpServer({
+    expectedToken: WHATSAPP_BRIDGE_TOKEN,
+    statusPayload: bridgeStatus,
+    pairingQrPayload,
+    async reconnect(clearAuth: boolean) {
+      await reconnectSocket(clearAuth);
+      return {
+        ok: true,
+        status: "reconnecting",
+        clear_auth: clearAuth,
+        socket_generation: socketGeneration,
+      };
+    },
+    currentSocket: () => currentSock,
+    notConnectedBody: () => ({ error: "not_connected", connection: connectionStatus }),
+    recordSendRequest(body) {
+      sendRequestCount += 1;
+      lastSendRequestAt = new Date().toISOString();
+      lastSendSummary = {
+        chat_jid: typeof body.chat_jid === "string" ? body.chat_jid : "",
+        has_text: typeof body.text === "string" && body.text.trim().length > 0,
+        media_type: typeof body.media_type === "string" ? body.media_type : "",
+        socket_generation: socketGeneration,
+        connection: connectionStatus,
+      };
+    },
+    recordSendResult(result) {
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        sendSuccessCount += 1;
+        lastSendSuccessAt = new Date().toISOString();
+        lastSendError = null;
+      } else {
         sendFailureCount += 1;
         lastSendFailureAt = new Date().toISOString();
-        lastSendError = `${errorName}: ${errorMessage}`;
-        console.error("[bridge] failed to send outbound payload:", error);
-        sendJson(response, 500, {
-          error: "send_failed",
-          error_name: errorName,
-          error_message: errorMessage,
-          stack: errorStack.split("\n").slice(0, 6).join("\n"),
-        });
-      });
+        lastSendError = JSON.stringify(result.body);
+      }
+    },
+    recordSendException(error) {
+      const errorName = error instanceof Error ? error.name : "Error";
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      sendFailureCount += 1;
+      lastSendFailureAt = new Date().toISOString();
+      lastSendError = `${errorName}: ${errorMessage}`;
+      console.error("[bridge] failed to send outbound payload:", error);
+    },
   });
 
   sendServer.listen(BRIDGE_PORT, BRIDGE_HOST, () => {
@@ -693,12 +656,12 @@ async function flushInboundBuffer(chatJid: string): Promise<void> {
     lastBackendForwardError = null;
     forwardedBatchCount += 1;
     console.log(
-      `[bridge] forwarded batch chat=${chatJid} count=${messages.length} text_preview=${JSON.stringify(textPreview(messages.map((message) => message.text).join(" | ")))}`,
+      `[bridge] forwarded batch chat=${chatJid} count=${messages.length} text_len=${messages.reduce((total, message) => total + message.text.length, 0)}`,
     );
   } catch (error) {
     backendForwardFailureCount += 1;
     lastBackendForwardError = error instanceof Error ? error.message : String(error);
-    console.error("[bridge] failed to forward message batch:", error);
+    console.error(`[bridge] failed to forward message batch error_name=${errorName(error)}`);
   }
 }
 
@@ -709,12 +672,12 @@ async function forwardImmediate(message: NormalizedMessage): Promise<void> {
     lastBackendForwardError = null;
     forwardedImmediateCount += 1;
     console.log(
-      `[bridge] forwarded immediate chat=${message.chatJid} fromMe=${message.fromMe} id=${message.messageId} text_preview=${JSON.stringify(textPreview(message.text))}`,
+      `[bridge] forwarded immediate chat=${message.chatJid} fromMe=${message.fromMe} id=${message.messageId} text_len=${message.text.length}`,
     );
   } catch (error) {
     backendForwardFailureCount += 1;
     lastBackendForwardError = error instanceof Error ? error.message : String(error);
-    console.error("[bridge] failed to forward immediate message:", error);
+    console.error(`[bridge] failed to forward immediate message error_name=${errorName(error)}`);
   }
 }
 
@@ -751,7 +714,7 @@ async function bufferMessage(message: WAMessage): Promise<void> {
     message_id: normalized.messageId,
   };
   console.log(
-    `[bridge] received message chat=${normalized.chatJid} fromMe=${normalized.fromMe} type=${normalized.rawType} text_len=${normalized.text.length} text_preview=${JSON.stringify(textPreview(normalized.text))}`,
+    `[bridge] received message chat=${normalized.chatJid} fromMe=${normalized.fromMe} type=${normalized.rawType} text_len=${normalized.text.length}`,
   );
   const dropReason = dropReasonForMessage(normalized, bridgeStartedAtMs, WHATSAPP_MAX_BACKFILL_MS);
   if (dropReason) {
@@ -921,6 +884,7 @@ async function connectSocket(): Promise<void> {
 }
 
 async function start(): Promise<void> {
+  assertBridgeStartupSafe(BRIDGE_HOST, WHATSAPP_BRIDGE_TOKEN);
   installProcessHandlers();
   console.log(`[bridge] Backend: ${BACKEND_BASE_URL}`);
   console.log(`[bridge] Runtime: ${RUNTIME_DIR}`);
