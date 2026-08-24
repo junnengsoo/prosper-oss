@@ -18,7 +18,7 @@ from app.database.connection import Base
 from app.database.models import Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
-from app.schemas import BridgeInboundMessage, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
+from app.schemas import BridgeInboundMessage, ConversationStageUpdate, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
 from app.database.seed import seed_all
 from app.services import (
     append_message,
@@ -67,7 +67,6 @@ def add_property(
             available_from="Immediate",
             full_address=f"{property_name} #03-752",
             property_url=f"https://example.com/{property_id}",
-            landlord_profile_requirements="Max 4 pax",
             tenant_facing_caveats=tenant_notes,
         ),
     )
@@ -120,12 +119,11 @@ def outbound_texts(session, conversation_id: int) -> list[str]:
     ]
 
 
-def matched_unit_result(property_id: str = "RTF-001", *, profile_status: str = "no_profile_detected") -> dict:
+def matched_listing_result(property_id: str = "RTF-001") -> dict:
     return {
-        "unit_matching": {
+        "rental_listing_matching": {
             "match_status": "matched",
             "matched_property_status": "available",
-            "profile_info_status": profile_status,
             "matched_properties": [{"property_id": property_id, "property_name": "301C Punggol Central"}],
             "reason": "matched test property",
         }
@@ -175,7 +173,7 @@ def test_delete_property_removes_config_and_preserves_history(session):
     conversation.matched_property_id = property_.property_id
     stage_run = StageRun(
         conversation_id=conversation.id,
-        stage="unit_matching",
+        stage="rental_listing_matching",
         input_snapshot="input",
         output_json='{"matched": true}',
         status="success",
@@ -318,6 +316,26 @@ def test_playbook_validation_rejects_invalid_blocks(session, payload, error_text
         upsert_property_playbook(session, "RTF-001", PropertyPlaybookIn.model_validate(payload))
 
 
+def test_removed_extra_contract_shapes_are_rejected():
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        PropertyIn.model_validate(
+            {
+                "property_id": "RTF-OLD",
+                "property_name": "Old Listing",
+                "unexpected_field": "screening requirement",
+            }
+        )
+
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        PropertyPlaybookIn.model_validate({"removed_blocks": []})
+
+    with pytest.raises(ValueError):
+        PlaybookBlock.model_validate({"type": "unsupported_block"})
+
+    with pytest.raises(ValueError):
+        ConversationStageUpdate.model_validate({"stage": "removed_stage"})
+
+
 def test_playbook_routes_get_put_validate_and_export(session):
     from fastapi import HTTPException
     from app.main import export_config, get_property_playbook_route, put_property_playbook_route
@@ -330,8 +348,6 @@ def test_playbook_routes_get_put_validate_and_export(session):
     assert effective["id"] is None
     assert effective["enabled"] is False
     assert effective["initial_reply_blocks"] == []
-    assert effective["qualification_suitable_blocks"] == []
-    assert effective["qualification_not_suitable_blocks"] == []
 
     updated = put_property_playbook_route(
         property_.property_id,
@@ -373,7 +389,6 @@ def test_initial_reply_uses_property_playbook_override_and_gallery(session):
                 {"type": "message", "text": "Hi yes available, my unit is {unit_info}."},
                 {"type": "delay", "seconds": 1},
                 {"type": "message", "text": "{tenant_notes}"},
-                {"type": "profile_form"},
                 {"type": "gallery", "mode": "enabled_property_gallery"},
             ]
         ),
@@ -381,63 +396,14 @@ def test_initial_reply_uses_property_playbook_override_and_gallery(session):
     conversation = add_fake_conversation(session)
     session.commit()
 
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
 
     assert result["send_result"]["status"] == "sent"
     texts = outbound_texts(session, conversation.id)
     assert texts[0] == "Hi yes available, my unit is 301C Punggol Central #03-752."
     assert texts[1] == "Duplicate listings warning."
-    assert "Budget:" in texts[2]
-    assert texts[3] == "[video] /tmp/301c-tour.mp4"
+    assert texts[2] == "[video] /tmp/301c-tour.mp4"
     assert all("disabled" not in text for text in texts)
-
-
-def test_sale_property_initial_reply_can_use_sale_specific_playbook_without_rental_profile_form(session):
-    property_ = upsert_property(
-        session,
-        PropertyIn(
-            property_id="SALE-001",
-            property_name="One Pearl Bank",
-            status="available",
-            property_type="sale",
-            bedrooms=2,
-            bathrooms=2,
-            asking_rent=1_800_000,
-            available_from="Immediate",
-            full_address="One Pearl Bank, 1 Pearl Bank",
-            property_url="https://example.com/listings/sale-001",
-            propertyguru_listing_id="9000001",
-            tenant_facing_caveats="Sale viewing by appointment only.",
-        ),
-    )
-    upsert_property_playbook(
-        session,
-        property_.property_id,
-        PropertyPlaybookIn(
-            initial_reply_blocks=[
-                {"type": "message", "text": "Hi, yes {property_name} is available for sale."},
-                {"type": "message", "text": "{tenant_notes}"},
-                {"type": "message", "text": "Can I check your budget and preferred viewing time?"},
-            ]
-        ),
-    )
-    conversation = add_fake_conversation(session, text="Hi, is One Pearl Bank still available for sale?")
-    session.commit()
-
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
-    session.commit()
-
-    assert result["send_result"]["status"] == "sent"
-    texts = outbound_texts(session, conversation.id)
-    assert texts == [
-        "Hi, yes One Pearl Bank is available for sale.",
-        "Sale viewing by appointment only.",
-        "Can I check your budget and preferred viewing time?",
-    ]
-    combined = "\n".join(texts)
-    assert "No. of people staying" not in combined
-    assert "Type of Pass" not in combined
-    assert "Lease" not in combined
 
 
 def test_initial_reply_sends_nothing_when_no_explicit_playbook(session):
@@ -445,7 +411,7 @@ def test_initial_reply_sends_nothing_when_no_explicit_playbook(session):
     conversation = add_fake_conversation(session)
     session.commit()
 
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
 
     assert result["send_result"] == {"status": "not_attempted", "reason": "no_planned_actions"}
     assert outbound_texts(session, conversation.id) == []
@@ -461,47 +427,14 @@ def test_auto_reply_only_sends_once_per_conversation(session):
     conversation = add_fake_conversation(session)
     session.commit()
 
-    first = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
-    second = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    first = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
+    second = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
 
     assert first["send_result"]["status"] == "sent"
     assert second["send_result"] == {"status": "skipped", "reason": "auto_reply_already_sent"}
     texts = outbound_texts(session, conversation.id)
     assert texts[0] == "Hi, yes this unit is still available."
     assert len([text for text in texts if text == "Hi, yes this unit is still available."]) == 1
-
-
-def test_legacy_stock_playbook_uses_current_mvp_reply(session):
-    property_ = add_property(session, "RTF-001")
-    upsert_property_media(
-        session,
-        property_.property_id,
-        PropertyMediaIn(media_type="photo", file_path="/tmp/301c-main.jpg", caption="living room", enabled=True),
-    )
-    session.add(
-        PropertyPlaybook(
-            property_id=property_.property_id,
-            enabled=True,
-            initial_reply_blocks=[
-                {"type": "message", "text": "Hi, thanks for enquiring about {unit_info}. I'm the listing agent."},
-                {"type": "message", "text": "To help me check suitability and arrange viewings, please fill this quick profile form: {profile_form}"},
-                {"type": "gallery", "mode": "enabled_property_gallery"},
-                {"type": "message", "text": "Here are some photos of the unit."},
-            ],
-        )
-    )
-    conversation = add_fake_conversation(session)
-    session.commit()
-
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
-
-    assert result["send_result"]["status"] == "sent"
-    texts = outbound_texts(session, conversation.id)
-    assert texts[0] == "Hi, yes this unit is still available."
-    assert "姓名 Name" in texts[1]
-    assert "Budget:" not in texts[0]
-    assert texts[2] == "[photo] /tmp/301c-main.jpg"
-    assert len(texts) == 3
 
 
 def test_text_only_playbook_does_not_validate_broken_gallery_media(session, monkeypatch):
@@ -524,7 +457,7 @@ def test_text_only_playbook_does_not_validate_broken_gallery_media(session, monk
 
     monkeypatch.setattr("app.actions.send_via_bridge", fake_send)
 
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
 
     assert result["send_result"]["status"] == "sent"
     assert outbound_texts(session, conversation.id) == ["Hi 301C Punggol Central"]
@@ -556,57 +489,11 @@ def test_playbook_uses_only_explicit_delay_blocks(session, monkeypatch):
     monkeypatch.setattr("app.actions.send_via_bridge", fake_send)
     monkeypatch.setattr("app.actions.asyncio.sleep", fake_sleep)
 
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
 
     assert result["send_result"]["status"] == "sent"
     assert outbound_texts(session, conversation.id) == ["First", "Second"]
     assert sleeps == [2]
-
-
-def test_qualification_match_uses_suitable_playbook_blocks(session):
-    property_ = add_property(session, "RTF-001")
-    upsert_property_playbook(
-        session,
-        property_.property_id,
-        PropertyPlaybookIn(qualification_suitable_blocks=[{"type": "message", "text": "Thanks, checking with landlord."}]),
-    )
-    conversation = add_fake_conversation(session)
-    conversation.matched_property_id = property_.property_id
-    session.commit()
-
-    result = asyncio.run(
-        execute_outbound_action_plan(
-        session,
-        conversation.id,
-        {"qualification": {"qualification_status": "match", "reason": "profile likely fits"}},
-        )
-    )
-
-    assert result["send_result"]["status"] == "sent"
-    assert outbound_texts(session, conversation.id)[-1] == "Thanks, checking with landlord."
-
-
-def test_qualification_not_match_uses_not_suitable_playbook(session):
-    property_ = add_property(session, "RTF-001")
-    upsert_property_playbook(
-        session,
-        property_.property_id,
-        PropertyPlaybookIn(qualification_not_suitable_blocks=[{"type": "message", "text": "Sorry, not suitable for this unit."}]),
-    )
-    conversation = add_fake_conversation(session)
-    conversation.matched_property_id = property_.property_id
-    session.commit()
-
-    result = asyncio.run(
-        execute_outbound_action_plan(
-        session,
-        conversation.id,
-        {"qualification": {"qualification_status": "not_match", "reason": "clear mismatch"}},
-        )
-    )
-
-    assert result["send_result"]["status"] == "sent"
-    assert outbound_texts(session, conversation.id)[-1] == "Sorry, not suitable for this unit."
 
 
 def test_send_lock_and_pause_ai_block_direct_outbound_execution(session):
@@ -621,13 +508,13 @@ def test_send_lock_and_pause_ai_block_direct_outbound_execution(session):
 
     update_config(session, {"send_lock": "true"})
     session.commit()
-    locked_result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    locked_result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
     assert locked_result["send_result"] == {"status": "blocked", "reason": "send_lock_enabled"}
     assert outbound_texts(session, conversation.id) == []
 
     update_config(session, {"send_lock": "false", "pause_ai": "true"})
     session.commit()
-    paused_result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    paused_result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
     assert paused_result["send_result"] == {"status": "blocked", "reason": "ai_pause_enabled"}
     assert outbound_texts(session, conversation.id) == []
 
@@ -644,7 +531,7 @@ def test_send_lock_does_not_block_fake_chat_simulator(session):
 
     update_config(session, {"send_lock": "true"})
     session.commit()
-    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_unit_result(property_.property_id)))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, matched_listing_result(property_.property_id)))
 
     assert result["send_result"]["status"] == "sent"
     assert outbound_texts(session, conversation.id) == ["Hi 301C Punggol Central"]
@@ -682,7 +569,7 @@ def test_bridge_send_retries_when_bridge_temporarily_not_connected(monkeypatch):
     assert len(calls) == 2
 
 
-def test_mvp_available_pipeline_sends_profile_form_and_media_without_qualification(session):
+def test_available_pipeline_sends_listing_reply_and_media(session):
     property_ = add_property(session, "RTF-001", property_name="301C Punggol Central")
     upsert_property_playbook(
         session,
@@ -690,7 +577,7 @@ def test_mvp_available_pipeline_sends_profile_form_and_media_without_qualificati
         PropertyPlaybookIn(
             initial_reply_blocks=[
                 {"type": "message", "text": "Hi, yes this unit is still available."},
-                {"type": "profile_form"},
+                {"type": "message", "text": "Please share your preferred viewing time."},
                 {"type": "gallery", "mode": "enabled_property_gallery"},
             ]
         ),
@@ -707,11 +594,10 @@ def test_mvp_available_pipeline_sends_profile_form_and_media_without_qualificati
 
     async def generator(messages):
         system = messages[0]["content"]
-        if "match the enquiry to one property" in system:
-            calls.append("unit_matching")
+        if "match the enquiry to one rental listing" in system:
+            calls.append("rental_listing_matching")
             return {
                 "match_status": "matched",
-                "profile_info_status": "profile_present",
                 "matched_properties": [{"property_id": property_.property_id, "property_name": property_.property_name}],
                 "reason": "deterministic unit match",
             }
@@ -723,59 +609,52 @@ def test_mvp_available_pipeline_sends_profile_form_and_media_without_qualificati
 
     assert result["send_result"]["status"] == "sent"
     assert conversation.current_stage == "end"
-    assert "qualification" not in result
     texts = outbound_texts(session, conversation.id)
     assert texts[0] == "Hi, yes this unit is still available."
-    assert "No. of people staying:" in texts[1]
+    assert texts[1] == "Please share your preferred viewing time."
     assert texts[2] == "[photo] /tmp/301c-main.jpg"
-    assert calls == ["unit_matching"]
+    assert calls == ["rental_listing_matching"]
 
 
 def test_triage_enquiry_key_accepts_property_and_legacy_rental_outputs():
     from app.main import triage_is_initial_enquiry
 
-    assert triage_is_initial_enquiry({"is_initial_property_enquiry": True}) is True
     assert triage_is_initial_enquiry({"is_initial_rental_enquiry": True}) is True
-    assert triage_is_initial_enquiry({"is_initial_property_enquiry": False}) is False
     assert triage_is_initial_enquiry({"stage_status": "manual_review"}) is False
 
 
-def test_triage_eval_cases_and_prompt_cover_sale_and_rental_enquiries():
+def test_triage_eval_cases_and_prompt_cover_rental_enquiries_only():
     from app.pipeline import build_triage_messages
 
     root = Path(__file__).resolve().parents[2]
     cases = json.loads((root / "evals" / "triage_cases.json").read_text())
     assert len(cases) >= 10
-    assert any(case["expected_is_initial_property_enquiry"] is True and "sale" in case["id"] for case in cases)
-    assert any(case["expected_is_initial_property_enquiry"] is True and "rental" in case["id"] for case in cases)
-    assert any(case["expected_is_initial_property_enquiry"] is False for case in cases)
+    assert any(case["expected_is_initial_rental_enquiry"] is True and "rental" in case["id"] for case in cases)
+    assert any(case["expected_is_initial_rental_enquiry"] is False for case in cases)
 
     system_prompt = build_triage_messages(cases[0]["thread"])[0]["content"]
-    assert "initial property enquiry" in system_prompt
-    assert "sale price" in system_prompt
-    assert "purchase interest" in system_prompt
-    assert "is_initial_property_enquiry" in system_prompt
+    assert "initial rental enquiry" in system_prompt
+    assert "purchase or asking-price enquiry" in system_prompt
+    assert "is_initial_rental_enquiry" in system_prompt
 
 
-def test_unit_matching_eval_cases_and_prompt_cover_sale_and_rental_properties():
+def test_rental_listing_matching_eval_cases_and_prompt_cover_rental_properties():
     from app.prompts import get_prompt
 
     root = Path(__file__).resolve().parents[2]
-    payload = json.loads((root / "evals" / "unit_matching_cases.json").read_text())
+    payload = json.loads((root / "evals" / "rental_listing_matching_cases.json").read_text())
     properties = payload["property_list"]
     cases = payload["cases"]
     property_jsonl = "\n".join(json.dumps(property_, ensure_ascii=False) for property_ in properties)
 
-    assert any(property_["property_id"].startswith("SALE-") for property_ in properties)
     assert any(property_["property_id"].startswith("RTF-") for property_ in properties)
-    assert any(case["expected_match_status"] == "matched" and str(case["expected_property_id"]).startswith("SALE-") for case in cases)
     assert any(case["expected_match_status"] == "matched" and str(case["expected_property_id"]).startswith("RTF-") for case in cases)
     assert any(case["expected_match_status"] == "ambiguous_multiple_matches" for case in cases)
     assert any(case["expected_match_status"] == "unmatched_property" for case in cases)
     assert any(case["id"] == "listing_id_mismatch_does_not_fallback_to_name" for case in cases)
 
-    system_prompt = get_prompt("unit_matching").render(property_list=property_jsonl)
-    assert "property enquiry" in system_prompt
+    system_prompt = get_prompt("rental_listing_matching").render(property_list=property_jsonl)
+    assert "rental enquiry" in system_prompt
     assert "propertyguru_listing_id" in system_prompt
     assert "Do not fall back to property_name or full_address" in system_prompt
-    assert "Do not extract or judge tenant/buyer profile information" in system_prompt
+    assert "Do not extract or judge tenant profile information" in system_prompt

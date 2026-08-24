@@ -59,10 +59,9 @@ from .llm import flush_langfuse
 from .pipeline import (
     route_stored_conversation_after_inbound,
     run_initial_enquiry_pipeline,
-    run_qualification,
+    run_rental_listing_matching,
+    run_rental_listing_matching_pipeline,
     run_triage_text,
-    run_unit_matching,
-    run_unit_matching_then_maybe_qualification,
 )
 from .playbooks import (
     get_property_playbook,
@@ -165,15 +164,10 @@ def route_context(context: RequestContext | object = None) -> RequestContext:
 
 
 def triage_is_initial_enquiry(triage: dict[str, Any] | None) -> bool:
-    """Return whether triage classified a thread as an initial property enquiry.
-
-    The old prompt used `is_initial_rental_enquiry`; keep accepting it so older
-    manual tests and traces remain compatible while sale enquiries move to the
-    broader `is_initial_property_enquiry` key.
-    """
+    """Return whether triage classified a thread as an initial rental enquiry."""
     if not isinstance(triage, dict):
         return False
-    return triage.get("is_initial_property_enquiry") is True or triage.get("is_initial_rental_enquiry") is True
+    return triage.get("is_initial_rental_enquiry") is True
 
 
 async def attach_outbound_action_result(session: Session, result: dict, conversation_id: int | None = None) -> dict:
@@ -525,8 +519,6 @@ def get_property_playbook_route(
             "id": None,
             "property_id": property_id,
             "initial_reply_blocks": [],
-            "qualification_suitable_blocks": [],
-            "qualification_not_suitable_blocks": [],
             "enabled": False,
             "created_at": None,
             "updated_at": None,
@@ -908,8 +900,8 @@ async def fake_inbound_and_run(
     elif "triage" in locals() and triage_is_initial_enquiry(triage):
         conversation = session.get(Conversation, message.conversation_id)
         if conversation:
-            conversation.current_stage = "unit_matching"
-        result = {"triage": triage, **await run_unit_matching_then_maybe_qualification(session, message.conversation_id)}
+            conversation.current_stage = "rental_listing_matching"
+        result = {"triage": triage, **await run_rental_listing_matching_pipeline(session, message.conversation_id)}
     else:
         result = await route_stored_conversation_after_inbound(session, message.conversation_id)
     result = await attach_outbound_action_result(session, result, message.conversation_id)
@@ -1010,8 +1002,8 @@ async def bridge_inbound(
         if "triage" in locals() and triage_is_initial_enquiry(triage):
             conversation = session.get(Conversation, int(data["conversation_id"]))
             if conversation:
-                conversation.current_stage = "unit_matching"
-            result = {"triage": triage, **await run_unit_matching_then_maybe_qualification(session, int(data["conversation_id"]))}
+                conversation.current_stage = "rental_listing_matching"
+            result = {"triage": triage, **await run_rental_listing_matching_pipeline(session, int(data["conversation_id"]))}
         else:
             result = await route_stored_conversation_after_inbound(session, int(data["conversation_id"]))
         result = await attach_outbound_action_result(session, result, int(data["conversation_id"]))
@@ -1077,10 +1069,10 @@ async def bridge_inbound_batch(
         if contact and contact.status == "active":
             if pretriage_result and triage_is_initial_enquiry(pretriage_result):
                 if conversation:
-                    conversation.current_stage = "unit_matching"
+                    conversation.current_stage = "rental_listing_matching"
                 pipeline_result = {
                     "triage": pretriage_result,
-                    **await run_unit_matching_then_maybe_qualification(session, pipeline_conversation_id),
+                    **await run_rental_listing_matching_pipeline(session, pipeline_conversation_id),
                 }
             else:
                 pipeline_result = await route_stored_conversation_after_inbound(session, pipeline_conversation_id)
@@ -1138,8 +1130,8 @@ async def run_next_pipeline_route(
     return PipelineRunResponse(conversation_id=conversation_id, result=result)
 
 
-@app.post("/api/conversations/{conversation_id}/run-unit-matching", response_model=PipelineRunResponse)
-async def run_unit_matching_route(
+@app.post("/api/conversations/{conversation_id}/run-rental-listing-matching", response_model=PipelineRunResponse)
+async def run_rental_listing_matching_route(
     conversation_id: int,
     session: Session = Depends(get_session),
     context: RequestContext = DashboardContext,
@@ -1147,24 +1139,7 @@ async def run_unit_matching_route(
     if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
         raise HTTPException(status_code=404, detail="Conversation not found")
     try:
-        result = await run_unit_matching(session, conversation_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    result = await attach_outbound_action_result(session, result, conversation_id)
-    session.commit()
-    return PipelineRunResponse(conversation_id=conversation_id, result=result)
-
-
-@app.post("/api/conversations/{conversation_id}/run-qualification", response_model=PipelineRunResponse)
-async def run_qualification_route(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        result = await run_qualification(session, conversation_id)
+        result = await run_rental_listing_matching(session, conversation_id)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     result = await attach_outbound_action_result(session, result, conversation_id)

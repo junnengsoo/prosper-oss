@@ -82,7 +82,7 @@ textarea {
 }
 
 .navItem,
-.profileRail {
+.accountRail {
   position: relative;
   width: 100%;
   min-height: 58px;
@@ -113,7 +113,7 @@ textarea {
   background: #000;
 }
 
-.profileRail {
+.accountRail {
   margin-top: auto;
   border-top: 1px solid var(--border-soft);
   padding-top: 12px;
@@ -715,7 +715,7 @@ textarea:focus {
 
 .leadHeader span,
 .matchedPropertyCard span,
-.qualificationCard p,
+.auditCard p,
 .timelineList span,
 .listingMeta span,
 .listingPrice span,
@@ -741,7 +741,7 @@ textarea:focus {
 }
 
 .matchedPropertyCard,
-.qualificationCard {
+.auditCard {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -762,7 +762,7 @@ textarea:focus {
   margin-bottom: 4px;
 }
 
-.qualificationCard {
+.auditCard {
   display: grid;
   gap: 12px;
 }

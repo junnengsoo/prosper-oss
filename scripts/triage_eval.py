@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run triage prompt evals against rental and sale WhatsApp enquiry fixtures.
+"""Run triage prompt evals against rental WhatsApp enquiry fixtures.
 
 This calls the configured LLM provider by default and exits non-zero if the
 provider is unreachable, misconfigured, or any case fails.
@@ -46,30 +46,29 @@ def load_cases(path: Path) -> list[dict[str, Any]]:
         thread = str(item.get("thread") or "").strip()
         if not thread:
             raise ValueError(f"{case_id}: thread must not be blank")
-        expected = item.get("expected_is_initial_property_enquiry")
+        expected = item.get("expected_is_initial_rental_enquiry")
         if not isinstance(expected, bool):
-            raise ValueError(f"{case_id}: expected_is_initial_property_enquiry must be boolean")
+            raise ValueError(f"{case_id}: expected_is_initial_rental_enquiry must be boolean")
         cases.append(item)
     return cases
 
 
 def normalize_is_initial(result: dict[str, Any]) -> bool:
-    """Read the new triage key, with old rental-only key as compatibility fallback."""
-    return result.get("is_initial_property_enquiry") is True or result.get("is_initial_rental_enquiry") is True
+    """Read the rental-only triage key."""
+    return result.get("is_initial_rental_enquiry") is True
 
 
 def validate_prompt_contract(cases: list[dict[str, Any]]) -> None:
     sample_messages = build_triage_messages(cases[0]["thread"])
     system = sample_messages[0]["content"]
     required_phrases = [
-        "initial property enquiry",
-        "sale price",
-        "purchase interest",
-        "is_initial_property_enquiry",
+        "initial rental enquiry",
+        "purchase or asking-price enquiry",
+        "is_initial_rental_enquiry",
     ]
     missing = [phrase for phrase in required_phrases if phrase not in system]
     if missing:
-        raise ValueError(f"triage prompt is missing expected sale/property wording: {', '.join(missing)}")
+        raise ValueError(f"triage prompt is missing expected rental wording: {', '.join(missing)}")
 
 
 async def run_live_eval(cases: list[dict[str, Any]]) -> int:
@@ -89,7 +88,7 @@ async def run_live_eval(cases: list[dict[str, Any]]) -> int:
             failures += 1
             continue
         actual = normalize_is_initial(result)
-        expected = bool(case["expected_is_initial_property_enquiry"])
+        expected = bool(case["expected_is_initial_rental_enquiry"])
         status = "PASS" if actual == expected else "FAIL"
         if status == "FAIL":
             failures += 1

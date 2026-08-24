@@ -1,23 +1,18 @@
 import json
 import re
-from datetime import datetime
 from typing import Any, Callable, Awaitable
-from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .llm import LlmMessage, LlmNotConfiguredError, LlmProviderError, generate_json
 from .database.models import Contact, Conversation, Message, Property, StageRun
-from .property_context import render_property_context, render_property_facts, render_qualification_property_context
 from .prompts import get_prompt
-from .qualification import QualificationLoop, QualificationOutputError
-from .services import get_config_value, is_ai_paused
+from .services import is_ai_paused
 
 
 JsonGenerator = Callable[[list[LlmMessage]], Awaitable[dict[str, Any]]]
-SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
-INITIAL_STAGE = "unit_matching"
+INITIAL_STAGE = "rental_listing_matching"
 END_STAGE = "end"
 
 
@@ -54,13 +49,6 @@ def serialize_llm_messages(messages: list[LlmMessage]) -> str:
     return json.dumps(messages, ensure_ascii=False, indent=2)
 
 
-def render_runtime_context(now: datetime | None = None) -> str:
-    """Render current Singapore date context for prompts that interpret relative dates."""
-    current = now.astimezone(SINGAPORE_TZ) if now else datetime.now(SINGAPORE_TZ)
-    today = f"{current.day} {current.strftime('%b %Y')}"
-    return f"Today is {today} in Singapore. Use Singapore time when interpreting relative dates."
-
-
 def build_triage_messages(thread: str) -> list[LlmMessage]:
     """Build pre-storage triage input from a raw WhatsApp thread or burst batch."""
     prompt = get_prompt("triage")
@@ -68,7 +56,7 @@ def build_triage_messages(thread: str) -> list[LlmMessage]:
 
 
 def render_available_property_jsonl(session: Session) -> str:
-    """Render configured properties as JSONL for the unit-matching prompt."""
+    """Render configured rental listings as JSONL for the matching prompt."""
     properties = session.scalars(select(Property).order_by(Property.property_id)).all()
     lines = []
     for property_ in properties:
@@ -176,68 +164,11 @@ def as_dict(value: Any) -> dict[str, Any] | None:
 
 
 def manual_review_result(result: dict[str, Any], reason: str) -> dict[str, Any]:
-    """Convert a unit-matching result into a manual-review result with a clear reason."""
+    """Convert a listing-matching result into a manual-review result with a clear reason."""
     updated = dict(result)
     updated["match_status"] = "manual_review"
     updated["reason"] = reason
     return updated
-
-
-def has_profile_info_from_unit_matching(result: dict[str, Any]) -> bool:
-    """Check whether unit matching says the inbound thread already includes a profile."""
-    return str(result.get("profile_info_status") or "").strip().lower() == "profile_present"
-
-
-def latest_unit_matching_has_profile_info(session: Session, conversation_id: int) -> bool:
-    """Check whether the latest unit-matching run detected an already-provided tenant profile."""
-    run = session.scalar(
-        select(StageRun)
-        .where(StageRun.conversation_id == conversation_id, StageRun.stage == "unit_matching", StageRun.output_json.is_not(None))
-        .order_by(StageRun.id.desc())
-    )
-    if not run or not run.output_json:
-        return False
-    try:
-        output = json.loads(run.output_json)
-    except json.JSONDecodeError:
-        return False
-    return has_profile_info_from_unit_matching(output)
-
-
-def conversation_has_qualification_context(session: Session, conversation_id: int) -> bool:
-    """Return whether qualification has already interpreted tenant profile context in this conversation."""
-    run = session.scalar(
-        select(StageRun)
-        .where(StageRun.conversation_id == conversation_id, StageRun.stage == "qualification", StageRun.output_json.is_not(None))
-        .order_by(StageRun.id.desc())
-    )
-    if not run or not run.output_json:
-        return False
-    try:
-        output = json.loads(run.output_json)
-    except json.JSONDecodeError:
-        return False
-    return isinstance(output, dict) and "qualification_status" in output
-
-
-def conversation_has_profile_context(session: Session, conversation_id: int) -> bool:
-    """Decide whether a conversation already has tenant profile context."""
-    return latest_unit_matching_has_profile_info(session, conversation_id) or conversation_has_qualification_context(
-        session, conversation_id
-    )
-
-
-def should_send_profile_present_available_sequence(qualification_result: dict[str, Any]) -> bool:
-    """Decide whether to still send the available-unit sequence after profile-present qualification."""
-    return qualification_result.get("qualification_status") in {"match", "incomplete", "clarify_fit"}
-
-
-def _qualification_decision(result: dict[str, Any]) -> dict[str, Any]:
-    """Normalize direct or nested qualification output into a single decision dictionary."""
-    if "qualification_status" in result:
-        return result
-    nested = result.get("qualification")
-    return nested if isinstance(nested, dict) else {}
 
 
 async def run_triage_text(
@@ -266,17 +197,17 @@ async def run_triage_text(
     return result
 
 
-async def run_unit_matching(
+async def run_rental_listing_matching(
     session: Session,
     conversation_id: int,
     generator: JsonGenerator = generate_json,
 ) -> dict[str, Any]:
-    """Match an enquiry conversation to one configured property and route by availability."""
+    """Match a rental enquiry conversation to one configured rental listing and route by availability."""
     conversation = session.get(Conversation, conversation_id)
     if not conversation:
         raise ValueError("Conversation not found")
     ensure_pipeline_allowed(session, conversation)
-    prompt = get_prompt("unit_matching")
+    prompt = get_prompt("rental_listing_matching")
     property_jsonl = render_available_property_jsonl(session)
     llm_messages = [
         {
@@ -292,16 +223,16 @@ async def run_unit_matching(
         result = await run_llm_stage(
             generator,
             llm_messages,
-            stage="unit_matching",
+            stage="rental_listing_matching",
             conversation_id=conversation_id,
             metadata={"available_property_count": property_jsonl.count("\n") + 1 if property_jsonl else 0},
         )
     except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, ValueError) as error:
         conversation.current_stage = END_STAGE
-        record_stage_run(session, conversation_id, "unit_matching", input_snapshot, None, "error", str(error))
+        record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, None, "error", str(error))
         return {"match_status": "manual_review", "reason": str(error)}
 
-    record_stage_run(session, conversation_id, "unit_matching", input_snapshot, result, "success")
+    record_stage_run(session, conversation_id, "rental_listing_matching", input_snapshot, result, "success")
     if result.get("match_status") != "matched":
         conversation.current_stage = END_STAGE
         return result
@@ -340,13 +271,13 @@ async def run_unit_matching(
     return result
 
 
-async def run_unit_matching_then_maybe_qualification(
+async def run_rental_listing_matching_pipeline(
     session: Session,
     conversation_id: int,
     generator: JsonGenerator = generate_json,
 ) -> dict[str, Any]:
-    """Run the MVP automatic unit-matching flow."""
-    return {"unit_matching": await run_unit_matching(session, conversation_id, generator)}
+    """Run the automatic rental listing matching flow."""
+    return {"rental_listing_matching": await run_rental_listing_matching(session, conversation_id, generator)}
 
 
 async def run_initial_enquiry_pipeline(
@@ -354,8 +285,8 @@ async def run_initial_enquiry_pipeline(
     conversation_id: int,
     generator: JsonGenerator = generate_json,
 ) -> dict[str, Any]:
-    """Run the first stored-conversation MVP flow."""
-    return await run_unit_matching_then_maybe_qualification(session, conversation_id, generator)
+    """Run the first stored-conversation rental enquiry flow."""
+    return await run_rental_listing_matching_pipeline(session, conversation_id, generator)
 
 
 async def route_stored_conversation_after_inbound(
@@ -373,83 +304,12 @@ async def route_stored_conversation_after_inbound(
     if stage == INITIAL_STAGE:
         return await run_initial_enquiry_pipeline(session, conversation_id, generator)
 
-    if stage == "unit_matching":
+    if stage == "rental_listing_matching":
         if conversation.matched_property_id:
-            return {"stage_status": "no_action", "reason": "Matched conversation already handled by MVP flow"}
+            return {"stage_status": "no_action", "reason": "Matched conversation already handled"}
         return await run_initial_enquiry_pipeline(session, conversation_id, generator)
-
-    if stage == "qualification":
-        conversation.current_stage = END_STAGE
-        return {"stage_status": "no_action", "reason": "Qualification is disabled in the MVP flow"}
 
     if stage == END_STAGE:
         return {"stage_status": "no_action", "reason": "Conversation is at end stage"}
 
     return {"stage_status": "no_action", "reason": f"No automatic pipeline for stage {stage}"}
-
-
-async def run_qualification(
-    session: Session,
-    conversation_id: int,
-    generator: JsonGenerator = generate_json,
-) -> dict[str, Any]:
-    """Qualify the tenant profile against the current matched property requirements."""
-    conversation = session.get(Conversation, conversation_id)
-    if not conversation:
-        raise ValueError("Conversation not found")
-    ensure_pipeline_allowed(session, conversation)
-    if not conversation.matched_property_id:
-        conversation.current_stage = END_STAGE
-        return {"qualification_status": "unsure", "message": "", "reason": "No matched property on conversation"}
-
-    property_ = session.scalar(
-        select(Property).where(Property.property_id == conversation.matched_property_id)
-    )
-    if not property_:
-        conversation.current_stage = END_STAGE
-        return {"qualification_status": "unsure", "message": "", "reason": "Matched property not found"}
-
-    prompt = get_prompt("qualification")
-    property_info = render_qualification_property_context(property_)
-    llm_messages = [
-        {
-            "role": "system",
-            "content": prompt.render(
-                runtime_context=render_runtime_context(),
-                property_info=property_info,
-            ),
-        },
-        *messages_to_llm_messages(conversation_messages(session, conversation_id)),
-    ]
-    input_snapshot = serialize_llm_messages(llm_messages)
-    previous_turn_count = session.scalar(
-        select(func.count(StageRun.id)).where(
-            StageRun.conversation_id == conversation_id,
-            StageRun.stage == "qualification",
-            StageRun.status == "success",
-        )
-    ) or 0
-    loop = QualificationLoop(turn_count=int(previous_turn_count))
-    if loop.exhausted:
-        result = loop.handoff("Maximum qualification turns reached")
-        conversation.current_stage = END_STAGE
-        record_stage_run(session, conversation_id, "qualification", input_snapshot, result, "needs_review")
-        return result
-    try:
-        raw_result = await run_llm_stage(
-            generator,
-            llm_messages,
-            stage="qualification",
-            conversation_id=conversation_id,
-            property_id=property_.property_id,
-        )
-        result = loop.advance(raw_result)
-    except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, QualificationOutputError, ValueError) as error:
-        conversation.current_stage = END_STAGE
-        record_stage_run(session, conversation_id, "qualification", input_snapshot, None, "error", str(error))
-        return {"qualification_status": "unsure", "message": "", "reason": str(error)}
-
-    record_stage_run(session, conversation_id, "qualification", input_snapshot, result, "success")
-    status = result.get("qualification_status")
-    conversation.current_stage = "qualification" if status in {"incomplete", "clarify_fit"} else END_STAGE
-    return result

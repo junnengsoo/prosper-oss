@@ -8,7 +8,6 @@
     "bathrooms": 1,
     "asking_rent": 2800,
     "available_date": "Immediate",
-    "preferred_tenant_profile": "Up to 3 occupants; working professionals preferred",
     "tenant_facing_caveats": "Viewing requires one day's notice.",
     "propertyguru_listing_id": ""
   },
@@ -21,7 +20,6 @@
     "bathrooms": 2,
     "asking_rent": 3400,
     "available_date": "Immediate",
-    "preferred_tenant_profile": "Up to 4 occupants; family tenants considered",
     "tenant_facing_caveats": "The owner prefers a one-year lease.",
     "propertyguru_listing_id": ""
   },
@@ -34,7 +32,6 @@
     "bathrooms": 1,
     "asking_rent": 2200,
     "available_date": "2026-09-01",
-    "preferred_tenant_profile": "One or two occupants",
     "tenant_facing_caveats": "Available from September.",
     "propertyguru_listing_id": ""
   },
@@ -47,7 +44,6 @@
     "bathrooms": 2,
     "asking_rent": 3100,
     "available_date": "Immediate",
-    "preferred_tenant_profile": "No fixed preference",
     "tenant_facing_caveats": "Listing is currently pending an offer.",
     "propertyguru_listing_id": ""
   }

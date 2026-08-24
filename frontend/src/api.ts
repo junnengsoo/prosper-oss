@@ -77,7 +77,6 @@ export type PropertyRecord = {
   full_address: string | null;
   property_url: string | null;
   propertyguru_listing_id: string | null;
-  landlord_profile_requirements: string;
   tenant_facing_caveats: string;
   created_at: string;
   updated_at: string;
@@ -96,7 +95,7 @@ export type PropertyDeleteSummary = {
 };
 
 export type PlaybookBlock = {
-  type: "message" | "delay" | "profile_form" | "gallery";
+  type: "message" | "delay" | "gallery";
   text?: string | null;
   seconds?: number | null;
   mode?: "enabled_property_gallery" | null;
@@ -106,8 +105,6 @@ export type PropertyPlaybook = {
   id: number | null;
   property_id: string;
   initial_reply_blocks: PlaybookBlock[];
-  qualification_suitable_blocks: PlaybookBlock[];
-  qualification_not_suitable_blocks: PlaybookBlock[];
   enabled: boolean;
   created_at: string | null;
   updated_at: string | null;
@@ -359,13 +356,9 @@ export const api = {
     request<{ conversation_id: number; result: Record<string, unknown> }>(`/api/conversations/${conversationId}/run-next`, {
       method: "POST",
     }),
-  runQualification: (conversationId: number) =>
-    request<{ conversation_id: number; result: Record<string, unknown> }>(`/api/conversations/${conversationId}/run-qualification`, {
-      method: "POST",
-    }),
   closeConversation: (conversationId: number) =>
     request<Conversation>(`/api/conversations/${conversationId}/close`, { method: "POST" }),
-  updateConversationStage: (conversationId: number, stage: "unit_matching" | "qualification" | "end", resume_contact = true) =>
+  updateConversationStage: (conversationId: number, stage: "rental_listing_matching" | "end", resume_contact = true) =>
     request<Conversation>(`/api/conversations/${conversationId}/stage`, {
       method: "PATCH",
       body: JSON.stringify({ stage, resume_contact }),

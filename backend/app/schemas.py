@@ -61,8 +61,9 @@ class StartNewEnquiryRequest(BaseModel):
 
 
 class ConversationStageUpdate(BaseModel):
-    stage: Literal["unit_matching", "qualification", "end"]
+    stage: Literal["rental_listing_matching", "end"]
     resume_contact: bool = True
+    model_config = {"extra": "forbid"}
 
 
 class MessageOut(BaseModel):
@@ -92,8 +93,8 @@ class PropertyIn(BaseModel):
     full_address: Optional[str] = None
     property_url: Optional[str] = None
     propertyguru_listing_id: Optional[str] = None
-    landlord_profile_requirements: str = ""
     tenant_facing_caveats: str = ""
+    model_config = {"extra": "forbid"}
 
 
 class PropertyMediaIn(BaseModel):
@@ -162,17 +163,17 @@ class PropertyDeleteSummaryOut(BaseModel):
 
 
 class PlaybookBlock(BaseModel):
-    type: Literal["message", "delay", "profile_form", "gallery"]
+    type: Literal["message", "delay", "gallery"]
     text: Optional[str] = None
     seconds: Optional[float] = None
     mode: Optional[Literal["enabled_property_gallery"]] = None
+    model_config = {"extra": "forbid"}
 
 
 class PropertyPlaybookIn(BaseModel):
     initial_reply_blocks: list[PlaybookBlock] = Field(default_factory=list)
-    qualification_suitable_blocks: list[PlaybookBlock] = Field(default_factory=list)
-    qualification_not_suitable_blocks: list[PlaybookBlock] = Field(default_factory=list)
     enabled: bool = True
+    model_config = {"extra": "forbid"}
 
 
 class PropertyPlaybookOut(PropertyPlaybookIn):

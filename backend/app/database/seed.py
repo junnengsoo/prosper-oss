@@ -12,19 +12,6 @@ from ..playbooks import ensure_starter_property_playbook
 SEED_DATA_DIR = Path(__file__).resolve().parent / "seed_data"
 LISTINGS_VIEW_SEED_FILE = SEED_DATA_DIR / "demo_listings.json"
 
-DEFAULT_PROFILE_FORM = """Budget:
-No. of people staying:
-Relationship between people staying:
-Nationality:
-Race:
-Occupation:
-Type of Pass:
-Move In Date:
-Lease:
-Furnishing requirement (Fully / Partial / Unfurnished):
-Any pet:
-Smokes:"""
-
 DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS = {
     "PROP-001",
     "PROP-002",
@@ -37,38 +24,12 @@ def seed_app_config(session: Session) -> None:
     defaults = {
         "pause_ai": "false",
         "send_lock": "false",
-        "profile_form": DEFAULT_PROFILE_FORM,
     }
     for key, value in defaults.items():
         existing = session.scalar(select(AppConfig).where(AppConfig.key == key))
         if existing:
             continue
         session.add(AppConfig(key=key, value=value))
-
-
-def extract_property_rows_from_unit_matching_prompt(prompt_text: str) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
-    for raw_line in prompt_text.splitlines():
-        line = raw_line.strip().rstrip(",")
-        if not line.startswith("{") or not line.endswith("}"):
-            continue
-
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        if {"property_id", "property_name", "full_address"} <= set(row):
-            rows.append(
-                {
-                    "property_id": str(row.get("property_id") or "").strip(),
-                    "property_name": str(row.get("property_name") or "").strip(),
-                    "full_address": str(row.get("full_address") or "").strip(),
-                    "propertyguru_listing_id": str(row.get("propertyguru_listing_id") or "").strip(),
-                }
-            )
-
-    return [row for row in rows if row["property_id"] and row["property_name"]]
 
 
 def normalize_listing_status(value: str) -> str:
@@ -101,7 +62,6 @@ def property_kwargs_from_listing_seed(row: dict) -> dict:
         "available_from": str(row.get("available_date") or "").strip() or None,
         "full_address": listing_full_address(row),
         "propertyguru_listing_id": str(row.get("propertyguru_listing_id") or "").strip() or None,
-        "landlord_profile_requirements": str(row.get("preferred_tenant_profile") or "").strip(),
         "tenant_facing_caveats": str(row.get("tenant_facing_caveats") or "").strip(),
     }
 

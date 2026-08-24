@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run unit-matching evals against rental and sale property fixtures.
+"""Run rental listing matching evals against rental property fixtures.
 
 This calls the configured LLM provider and exits non-zero if the provider is
 unreachable, misconfigured, or any case fails.
@@ -24,14 +24,14 @@ from app.llm import LlmProviderError, generate_json  # noqa: E402
 from app.prompts import get_prompt  # noqa: E402
 
 
-DEFAULT_CASES_PATH = ROOT_DIR / "evals" / "unit_matching_cases.json"
+DEFAULT_CASES_PATH = ROOT_DIR / "evals" / "rental_listing_matching_cases.json"
 
 
 def load_eval_file(path: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     with path.open() as handle:
         parsed = json.load(handle)
     if not isinstance(parsed, dict):
-        raise ValueError("unit matching eval file must contain a JSON object")
+        raise ValueError("rental listing matching eval file must contain a JSON object")
     property_list = parsed.get("property_list")
     cases = parsed.get("cases")
     if not isinstance(property_list, list) or not property_list:
@@ -75,8 +75,8 @@ def property_jsonl(properties: list[dict[str, Any]]) -> str:
     return "\n".join(json.dumps(property_, ensure_ascii=False) for property_ in properties)
 
 
-def build_unit_matching_messages(message: str, properties: list[dict[str, Any]]) -> list[dict[str, str]]:
-    prompt = get_prompt("unit_matching")
+def build_rental_listing_matching_messages(message: str, properties: list[dict[str, Any]]) -> list[dict[str, str]]:
+    prompt = get_prompt("rental_listing_matching")
     return [
         {"role": "system", "content": prompt.render(property_list=property_jsonl(properties))},
         {"role": "user", "content": message},
@@ -113,12 +113,12 @@ def case_passed(case: dict[str, Any], result: dict[str, Any]) -> tuple[bool, str
 async def run_eval(properties: list[dict[str, Any]], cases: list[dict[str, Any]]) -> int:
     failures = 0
     for case in cases:
-        messages = build_unit_matching_messages(case["message"], properties)
+        messages = build_rental_listing_matching_messages(case["message"], properties)
         try:
             result = await generate_json(
                 messages,
                 {
-                    "stage": "unit_matching_eval",
+                    "stage": "rental_listing_matching_eval",
                     "metadata": {"case_id": case["id"]},
                 },
             )
@@ -140,15 +140,15 @@ async def run_eval(properties: list[dict[str, Any]], cases: list[dict[str, Any]]
 
 
 def validate_prompt_contract(properties: list[dict[str, Any]]) -> None:
-    system_prompt = build_unit_matching_messages("Hi One Pearl Bank", properties)[0]["content"]
+    system_prompt = build_rental_listing_matching_messages("Hi Maple Grove Residence", properties)[0]["content"]
     required_phrases = [
-        "property enquiry",
+        "rental enquiry",
         "propertyguru_listing_id",
-        "Do not extract or judge tenant/buyer profile",
+        "Do not extract or judge tenant profile",
     ]
     missing = [phrase for phrase in required_phrases if phrase not in system_prompt]
     if missing:
-        raise ValueError(f"unit matching prompt is missing expected sale/property wording: {', '.join(missing)}")
+        raise ValueError(f"rental listing matching prompt is missing expected rental wording: {', '.join(missing)}")
 
 
 async def main() -> int:
@@ -159,7 +159,7 @@ async def main() -> int:
     properties, cases = load_eval_file(args.cases)
     validate_prompt_contract(properties)
     failures = await run_eval(properties, cases)
-    print(f"unit matching live eval complete: {len(cases) - failures}/{len(cases)} passed")
+    print(f"rental listing matching live eval complete: {len(cases) - failures}/{len(cases)} passed")
     return 1 if failures else 0
 
 
