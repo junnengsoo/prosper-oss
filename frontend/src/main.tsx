@@ -2,30 +2,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
-  Bath,
-  BedDouble,
   Bell,
   Building2,
   CheckCircle2,
-  ChevronLeft,
   Clock,
-  Image as ImageIcon,
   Inbox,
   LockKeyhole,
   MessageSquare,
   Phone,
-  Plus,
   RefreshCw,
-  Save,
-  Search,
-  Send,
   Settings,
-  Square,
-  Trash2,
   UnlockKeyhole,
-  Upload,
   UserCircle,
-  Wand2,
   X,
 } from "lucide-react";
 import {
@@ -35,10 +23,8 @@ import {
   type Me,
   type Message,
   type PipelineInspection,
-  type PlaybookBlock,
   type PropertyInput,
   type PropertyMedia,
-  type PropertyPlaybook,
   type PropertyPlaybookInput,
   type PropertyRecord,
   type RuntimeStatus,
@@ -55,215 +41,31 @@ import {
   readStoredAppView,
 } from "./viewState";
 import { InboxView } from "./views/InboxView";
+import { PropertiesView } from "./views/PropertiesView";
+import { PropertyEditorView } from "./views/PropertyEditorView";
 import { SimulatorView } from "./views/SimulatorView";
 import {
   classNames,
-  EmptyState,
   formatDateTime,
-  formatMoney,
-  GalleryPreview,
   initials,
-  MediaPreview,
-  propertyAvailabilityLabel,
-  propertyAvailabilityTone,
-  replacePlaceholders,
-  statusTone,
 } from "./viewHelpers";
+import {
+  EMPTY_MEDIA_PATH_FORM,
+  EMPTY_PROPERTY_FORM,
+  PROPERTY_REQUIRED_FIELDS,
+  type EditorSection,
+  type MediaPathForm,
+  type PropertyRequiredField,
+  generatedPropertyId,
+  propertyToInput,
+} from "./propertyEditorState";
+import {
+  cleanAutoRepliesForSave,
+  defaultPlaybookInput,
+  effectiveAutoReplyInput,
+  emptyPlaybook,
+} from "./playbookState";
 import "./styles.css";
-
-type EditorSection = "facts" | "gallery" | "auto_replies";
-type AutoReplyField = "availableInitial";
-type PropertyRequiredField = "property_name" | "status" | "property_url";
-
-const PROPERTY_REQUIRED_FIELDS: PropertyRequiredField[] = ["property_name", "status", "property_url"];
-
-const EDITOR_SECTIONS: Array<{ key: EditorSection; label: string }> = [
-  { key: "facts", label: "Listing Facts" },
-  { key: "gallery", label: "Gallery" },
-  { key: "auto_replies", label: "Auto Replies" },
-];
-
-const PLACEHOLDERS = ["{unit_info}", "{property_guru_listing}"];
-const DEFAULT_MESSAGE_DELAY_SECONDS = 0.5;
-
-const DEFAULT_AUTO_REPLIES: Record<AutoReplyField, string> = {
-  availableInitial: "Hi, yes this unit is still available.",
-};
-
-const DEFAULT_VIEWING_MESSAGE = "Please share your preferred viewing time and move-in date, and I will check the next available slot.";
-
-const DEFAULT_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[]> = {
-  availableInitial: [
-    { type: "message", text: DEFAULT_AUTO_REPLIES.availableInitial },
-    { type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS },
-    { type: "message", text: DEFAULT_VIEWING_MESSAGE },
-  ],
-};
-
-const LEGACY_AUTO_REPLY_DEFAULTS: Record<AutoReplyField, string[]> = {
-  availableInitial: [
-    "Hi, thanks for enquiring about {unit_info}. I'm the listing agent.",
-    "Hi there! Thank you for inquiring about {unit_info}. I'm the listing agent.",
-  ],
-};
-
-const STOCK_GALLERY_CAPTIONS = new Set([
-  "Here are some photos of the unit.",
-]);
-
-const EMPTY_PROPERTY_FORM: PropertyInput = {
-  property_id: "",
-  property_name: "",
-  status: "available",
-  property_type: "rental",
-  bedrooms: null,
-  bathrooms: null,
-  asking_rent: null,
-  available_from: "",
-  full_address: "",
-  property_url: "",
-  propertyguru_listing_id: "",
-  tenant_facing_caveats: "",
-};
-
-function emptyPlaybook(): PropertyPlaybookInput {
-  return {
-    enabled: false,
-    initial_reply_blocks: [],
-  };
-}
-
-function playbookToInput(playbook: PropertyPlaybook | null | undefined): PropertyPlaybookInput {
-  return {
-    enabled: playbook?.enabled ?? false,
-    initial_reply_blocks: playbook?.initial_reply_blocks ?? [],
-  };
-}
-
-function defaultPlaybookInput(): PropertyPlaybookInput {
-  return {
-    enabled: false,
-    initial_reply_blocks: [
-      ...DEFAULT_AUTO_REPLY_SEQUENCES.availableInitial,
-      { type: "gallery", mode: "enabled_property_gallery" },
-    ],
-  };
-}
-
-function hasWorkflowBlocks(input: PropertyPlaybookInput): boolean {
-  return input.initial_reply_blocks.length > 0;
-}
-
-function effectivePlaybookInput(playbook: PropertyPlaybook | null | undefined): PropertyPlaybookInput {
-  const input = playbookToInput(playbook);
-  return playbook?.id || hasWorkflowBlocks(input) ? input : defaultPlaybookInput();
-}
-
-function effectiveAutoReplyInput(playbook: PropertyPlaybook | null | undefined): PropertyPlaybookInput {
-  const input = effectivePlaybookInput(playbook);
-  return {
-    enabled: input.enabled,
-    initial_reply_blocks: autoReplyWorkflowBlocks("availableInitial", input.initial_reply_blocks),
-  };
-}
-
-function normalizeAutoReplyDefault(field: AutoReplyField, value: string): string {
-  const normalized = value.trim();
-  const text = LEGACY_AUTO_REPLY_DEFAULTS[field].some((legacy) => legacy.trim() === normalized) ? DEFAULT_AUTO_REPLIES[field] : value;
-  return text;
-}
-
-function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReplyField): PlaybookBlock[] {
-  const editableBlocks = blocks.filter((block) => {
-    if (block.type === "delay") return true;
-    if (block.type !== "message") return false;
-    return !STOCK_GALLERY_CAPTIONS.has((block.text || "").trim());
-  });
-  return editableBlocks.length > 0 ? editableBlocks : DEFAULT_AUTO_REPLY_SEQUENCES[field];
-}
-
-function normalizeAutoReplyBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
-  return compactAutoReplyBlocks(blocks, field).map((block) => (
-    block.type === "message"
-      ? { ...block, text: normalizeAutoReplyDefault(field, block.text ?? "") }
-      : block
-  ));
-}
-
-function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
-  return [
-    ...normalizeAutoReplyBlocks(field, blocks),
-    { type: "gallery", mode: "enabled_property_gallery" },
-  ];
-}
-
-function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField): PlaybookBlock[] {
-  return compactAutoReplyBlocks(input.initial_reply_blocks, field);
-}
-
-function playbookWithAutoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, blocks: PlaybookBlock[]): PropertyPlaybookInput {
-  return {
-    ...input,
-    initial_reply_blocks: [...compactAutoReplyBlocks(blocks, field), { type: "gallery", mode: "enabled_property_gallery" }],
-  };
-}
-
-function cleanAutoReplyBlocksForSave(blocks: PlaybookBlock[], field: AutoReplyField): PlaybookBlock[] {
-  const cleaned: PlaybookBlock[] = [];
-  for (const block of compactAutoReplyBlocks(blocks, field)) {
-    if (block.type === "message") {
-      if (block.text?.trim()) cleaned.push({ type: "message", text: block.text });
-      continue;
-    }
-    if (block.type === "delay" && cleaned.length > 0 && cleaned[cleaned.length - 1].type !== "delay") {
-      cleaned.push({ type: "delay", seconds: block.seconds ?? DEFAULT_MESSAGE_DELAY_SECONDS });
-    }
-  }
-  while (cleaned[cleaned.length - 1]?.type === "delay") cleaned.pop();
-  if (!cleaned.some((block) => block.type === "message")) cleaned.push(...DEFAULT_AUTO_REPLY_SEQUENCES[field]);
-  return [...cleaned, { type: "gallery", mode: "enabled_property_gallery" }];
-}
-
-function cleanAutoRepliesForSave(input: PropertyPlaybookInput): PropertyPlaybookInput {
-  return {
-    enabled: input.enabled,
-    initial_reply_blocks: cleanAutoReplyBlocksForSave(input.initial_reply_blocks, "availableInitial"),
-  };
-}
-
-function propertyToInput(property: PropertyRecord | null | undefined): PropertyInput {
-  if (!property) return { ...EMPTY_PROPERTY_FORM };
-  return {
-    property_id: property.property_id,
-    property_name: property.property_name,
-    status: property.status,
-    property_type: "rental",
-    bedrooms: property.bedrooms,
-    bathrooms: property.bathrooms,
-    asking_rent: property.asking_rent,
-    available_from: property.available_from ?? "",
-    full_address: property.full_address ?? "",
-    property_url: property.property_url ?? "",
-    propertyguru_listing_id: property.propertyguru_listing_id ?? "",
-    tenant_facing_caveats: property.tenant_facing_caveats ?? "",
-  };
-}
-
-function generatedPropertyId(name: string, existingIds: Set<string>): string {
-  const base = name
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 36) || `PROPERTY-${Date.now().toString(36).toUpperCase()}`;
-  let candidate = `PROP-${base}`;
-  let suffix = 2;
-  while (existingIds.has(candidate)) {
-    candidate = `PROP-${base}-${suffix}`;
-    suffix += 1;
-  }
-  return candidate;
-}
 
 function getInitialView(): AppView {
   if (typeof window === "undefined") return "inbox";
@@ -305,7 +107,7 @@ function App() {
   const [editorSectionBusy, setEditorSectionBusy] = useState(false);
   const [propertyForm, setPropertyForm] = useState<PropertyInput>({ ...EMPTY_PROPERTY_FORM });
   const [propertyFormErrors, setPropertyFormErrors] = useState<Partial<Record<PropertyRequiredField, string>>>({});
-  const [mediaPathForm, setMediaPathForm] = useState({ file_path: "", caption: "", sort_order: 0, enabled: true, media_type: "photo" as "photo" | "video" });
+  const [mediaPathForm, setMediaPathForm] = useState<MediaPathForm>({ ...EMPTY_MEDIA_PATH_FORM });
 
   const [playbookDraft, setPlaybookDraft] = useState<PropertyPlaybookInput>(emptyPlaybook);
   const [playbookBaseline, setPlaybookBaseline] = useState<PropertyPlaybookInput>(emptyPlaybook);
@@ -670,7 +472,7 @@ function App() {
       sort_order: mediaPathForm.sort_order,
       enabled: mediaPathForm.enabled,
     });
-    setMediaPathForm({ file_path: "", caption: "", sort_order: 0, enabled: true, media_type: "photo" });
+    setMediaPathForm({ ...EMPTY_MEDIA_PATH_FORM });
     await loadAll();
   }
 
@@ -683,6 +485,30 @@ function App() {
 
   async function deleteMedia(media: PropertyMedia) {
     await api.deletePropertyMedia(media.id);
+    await loadAll();
+  }
+
+  async function updateMedia(media: PropertyMedia, patch: Partial<Pick<PropertyMedia, "caption" | "enabled" | "media_type" | "sort_order">>) {
+    if (!editingPropertyId || editingPropertyId === "__new__") throw new Error("Save the property before updating Gallery media");
+    await api.upsertPropertyMedia(editingPropertyId, {
+      media_type: patch.media_type ?? media.media_type,
+      file_path: media.file_path,
+      caption: patch.caption ?? media.caption,
+      sort_order: patch.sort_order ?? media.sort_order,
+      enabled: patch.enabled ?? media.enabled,
+    });
+    await loadAll();
+  }
+
+  async function reorderMedia(nextMedia: PropertyMedia[]) {
+    if (!editingPropertyId || editingPropertyId === "__new__") throw new Error("Save the property before reordering Gallery media");
+    await Promise.all(nextMedia.map((media, index) => api.upsertPropertyMedia(editingPropertyId, {
+      media_type: media.media_type,
+      file_path: media.file_path,
+      caption: media.caption,
+      sort_order: index + 1,
+      enabled: media.enabled,
+    })));
     await loadAll();
   }
 
@@ -828,6 +654,8 @@ function App() {
             onDelete={editingProperty ? () => runAction(() => deleteSelectedProperties([editingProperty.property_id]), "Property deleted") : undefined}
             onAddMediaPath={() => runAction(addMediaPath, "Gallery item added")}
             onUploadMedia={(file) => runAction(() => uploadMedia(file), "Gallery media uploaded")}
+            onUpdateMedia={(media, patch) => runAction(() => updateMedia(media, patch), "Gallery item saved")}
+            onReorderMedia={(media) => runAction(() => reorderMedia(media), "Gallery order saved")}
             onDeleteMedia={(media) => runAction(() => deleteMedia(media), "Gallery item removed")}
           />
         )}
@@ -1045,452 +873,6 @@ function WhatsappConnectionModal({
         )}
       </section>
     </div>
-  );
-}
-
-function PropertiesView({
-  properties,
-  selectedPropertyIds,
-  setSelectedPropertyIds,
-  search,
-  setSearch,
-  onNewProperty,
-  onManage,
-  onDeleteSelected,
-}: {
-  properties: PropertyRecord[];
-  selectedPropertyIds: string[];
-  setSelectedPropertyIds: React.Dispatch<React.SetStateAction<string[]>>;
-  search: string;
-  setSearch: (value: string) => void;
-  onNewProperty: () => void;
-  onManage: (property: PropertyRecord) => void;
-  onDeleteSelected: (propertyIds: string[]) => void;
-}) {
-  const visiblePropertyIds = properties.map((property) => property.property_id);
-  const selectedVisibleIds = visiblePropertyIds.filter((propertyId) => selectedPropertyIds.includes(propertyId));
-  const allVisibleSelected = visiblePropertyIds.length > 0 && selectedVisibleIds.length === visiblePropertyIds.length;
-
-  function togglePropertySelection(propertyId: string) {
-    setSelectedPropertyIds((current) =>
-      current.includes(propertyId) ? current.filter((item) => item !== propertyId) : [...current, propertyId],
-    );
-  }
-
-  function toggleSelectAllVisible() {
-    setSelectedPropertyIds((current) => {
-      const visible = new Set(visiblePropertyIds);
-      if (allVisibleSelected) return current.filter((propertyId) => !visible.has(propertyId));
-      return [...current, ...visiblePropertyIds.filter((propertyId) => !current.includes(propertyId))];
-    });
-  }
-
-  return (
-    <section className="propertiesPage">
-      <div className="pageToolbar">
-        <div className="toolbarLeft">
-          <div className="searchBox">
-            <Search size={18} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search listings" />
-          </div>
-          <span>{properties.length} listings managed</span>
-          <label className="selectAllControl">
-            <input type="checkbox" checked={allVisibleSelected} disabled={visiblePropertyIds.length === 0} onChange={toggleSelectAllVisible} />
-            Select all visible
-          </label>
-        </div>
-        <div className="toolbarActions">
-          {selectedPropertyIds.length > 0 && (
-            <div className="bulkActionBar">
-              <strong>{selectedPropertyIds.length} selected</strong>
-              <button className="dangerButton" onClick={() => onDeleteSelected(selectedPropertyIds)}>
-                <Trash2 size={15} /> Delete selected
-              </button>
-            </div>
-          )}
-          <button className="primaryButton" onClick={onNewProperty}><Plus size={17} /> New Listing</button>
-        </div>
-      </div>
-      <div className="listingStack">
-        {properties.length === 0 && <EmptyState title="No properties yet" body="Create or seed properties to manage listing workflows." />}
-        {properties.map((property) => {
-          const enabledMedia = property.media.filter((media) => media.enabled);
-          return (
-            <article key={property.property_id} className="listingCard">
-              <div className="listingImage"><GalleryPreview media={property.media} /></div>
-              <div className="listingBody">
-                <div className="listingTop">
-                  <div>
-                    <div className="badgeRow">
-                      <span className={classNames("badge", propertyAvailabilityTone(property.status))}>{propertyAvailabilityLabel(property.status)}</span>
-                    </div>
-                    <h2>{property.property_name}</h2>
-                    <p>
-                      <span>Rental</span>
-                      <span><BedDouble size={15} /> {property.bedrooms ?? "-"} BR</span>
-                      <span><Bath size={15} /> {property.bathrooms ?? "-"} Bath</span>
-                    </p>
-                  </div>
-                  <div className="listingPrice">
-                    <strong>{formatMoney(property.asking_rent)}</strong>
-                    <span>{property.available_from || "Availability not set"}</span>
-                  </div>
-                </div>
-                <div className="listingMeta">
-                  <div><span>Gallery</span><strong>{enabledMedia.length} enabled</strong></div>
-                </div>
-                <div className="listingActions">
-                  <label className="listingSelect">
-                    <input
-                      type="checkbox"
-                      checked={selectedPropertyIds.includes(property.property_id)}
-                      onChange={() => togglePropertySelection(property.property_id)}
-                    />
-                    Select
-                  </label>
-                  <button className="dangerButton" onClick={() => onDeleteSelected([property.property_id])}>
-                    <Trash2 size={15} /> Delete
-                  </button>
-                  <button className="primaryButton" onClick={() => onManage(property)}>Edit</button>
-                </div>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function PropertyEditorView({
-  property,
-  form,
-  setForm,
-  formErrors,
-  section,
-  setSection,
-  sectionBusy,
-  media,
-  mediaPathForm,
-  setMediaPathForm,
-  playbookDraft,
-  playbookDirty,
-  setPlaybookDraft,
-  config,
-  onBack,
-  onSave,
-  onDelete,
-  onAddMediaPath,
-  onUploadMedia,
-  onDeleteMedia,
-}: {
-  property: PropertyRecord | null;
-  form: PropertyInput;
-  setForm: (patch: Partial<PropertyInput>) => void;
-  formErrors: Partial<Record<PropertyRequiredField, string>>;
-  section: EditorSection;
-  setSection: (section: EditorSection) => void;
-  sectionBusy: boolean;
-  media: PropertyMedia[];
-  mediaPathForm: { file_path: string; caption: string; sort_order: number; enabled: boolean; media_type: "photo" | "video" };
-  setMediaPathForm: (form: { file_path: string; caption: string; sort_order: number; enabled: boolean; media_type: "photo" | "video" }) => void;
-  playbookDraft: PropertyPlaybookInput;
-  playbookDirty: boolean;
-  setPlaybookDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  config: Record<string, string>;
-  onBack: () => void;
-  onSave: () => void;
-  onDelete?: () => void;
-  onAddMediaPath: () => void;
-  onUploadMedia: (file: File) => void;
-  onDeleteMedia: (media: PropertyMedia) => void;
-}) {
-  const previewProperty = property ? { ...property, ...form, media } : null;
-  return (
-    <section className="propertyEditorPage">
-      <header className="editorHeader">
-        <button onClick={onBack}><ChevronLeft size={18} /> Back</button>
-        <div>
-          <h2>{property?.property_name || "New Listing"}</h2>
-          <span className={classNames("badge", statusTone(form.status))}>{form.status || "draft"}</span>
-        </div>
-        <div className="editorHeaderActions">
-          {property && onDelete && <button className="dangerButton" onClick={onDelete}><Trash2 size={16} /> Delete</button>}
-          <button className="primaryButton" onClick={onSave}><Save size={16} /> Save & Exit</button>
-        </div>
-      </header>
-      <div className="editorProgress"><span style={{ width: `${((EDITOR_SECTIONS.findIndex((item) => item.key === section) + 1) / EDITOR_SECTIONS.length) * 100}%` }} /></div>
-      <div className="editorLayout">
-        <aside className="sectionNav">
-          <strong>Your progress</strong>
-          {EDITOR_SECTIONS.map((item) => (
-            <button key={item.key} className={classNames(section === item.key && "active")} onClick={() => setSection(item.key)} disabled={sectionBusy}>
-              <span>{item.label}</span>
-              <CheckCircle2 size={15} />
-            </button>
-          ))}
-        </aside>
-        <section className="editorContent">
-          {section === "facts" && (
-            <EditorPanel title="Listing Facts" body="Structured facts used by matching and tenant-facing context.">
-              <Field label="Property name" required error={formErrors.property_name}><input value={form.property_name} onChange={(event) => setForm({ property_name: event.target.value })} /></Field>
-              <Field label="Status" required error={formErrors.status}>
-                <select value={form.status} onChange={(event) => setForm({ status: event.target.value })}>
-                  <option value="available">Available</option>
-                  <option value="unavailable">Unavailable</option>
-                  <option value="unknown">Unknown</option>
-                  <option value="draft">Draft</option>
-                </select>
-              </Field>
-              <Field label="Listing URL" required wide error={formErrors.property_url}><input value={form.property_url ?? ""} onChange={(event) => setForm({ property_url: event.target.value })} /></Field>
-              <Field label="Rent"><input type="number" value={form.asking_rent ?? ""} onChange={(event) => setForm({ asking_rent: event.target.value ? Number(event.target.value) : null })} /></Field>
-              <Field label="Available date"><input value={form.available_from ?? ""} onChange={(event) => setForm({ available_from: event.target.value })} /></Field>
-              <Field label="Bedrooms"><input type="number" value={form.bedrooms ?? ""} onChange={(event) => setForm({ bedrooms: event.target.value ? Number(event.target.value) : null })} /></Field>
-              <Field label="Bathrooms"><input type="number" value={form.bathrooms ?? ""} onChange={(event) => setForm({ bathrooms: event.target.value ? Number(event.target.value) : null })} /></Field>
-              <Field label="Address" wide><input value={form.full_address ?? ""} onChange={(event) => setForm({ full_address: event.target.value })} /></Field>
-            </EditorPanel>
-          )}
-          {section === "gallery" && (
-            <EditorPanel title="Gallery" body="Images and videos Prosper sends after this unit is matched.">
-              <div className="galleryGrid">
-                {media.map((item) => (
-                  <article key={item.id} className="galleryTile">
-                    <MediaPreview media={item} />
-                    <strong>{item.caption || item.file_path}</strong>
-                    <span>{item.enabled ? "Enabled" : "Disabled"} · {item.media_type}</span>
-                    <button onClick={() => onDeleteMedia(item)}><Trash2 size={15} /> Remove</button>
-                  </article>
-                ))}
-              </div>
-              <div className="inlineForm">
-                <input value={mediaPathForm.file_path} onChange={(event) => setMediaPathForm({ ...mediaPathForm, file_path: event.target.value })} placeholder="Local file path or storage reference" />
-                <input value={mediaPathForm.caption} onChange={(event) => setMediaPathForm({ ...mediaPathForm, caption: event.target.value })} placeholder="Caption" />
-                <button onClick={onAddMediaPath}>Add path</button>
-              </div>
-              <label className="uploadDrop">
-                <Upload size={18} />
-                Upload image/video
-                <input type="file" accept="image/*,video/*" onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.currentTarget.value = "";
-                  if (file) onUploadMedia(file);
-                }} />
-              </label>
-            </EditorPanel>
-          )}
-          {section === "auto_replies" && (
-            <AutoRepliesEditor
-              property={previewProperty}
-              draft={playbookDraft}
-              dirty={playbookDirty}
-              setDraft={setPlaybookDraft}
-              config={config}
-              disabled={!property}
-            />
-          )}
-        </section>
-      </div>
-    </section>
-  );
-}
-
-function AutoRepliesEditor({
-  property,
-  draft,
-  dirty,
-  setDraft,
-  config,
-  disabled,
-}: {
-  property: PropertyRecord | null;
-  draft: PropertyPlaybookInput;
-  dirty: boolean;
-  setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  config: Record<string, string>;
-  disabled: boolean;
-}) {
-  return (
-    <section className="autoRepliesLayout">
-      <div className="autoRepliesForm">
-        <div className="autoRepliesHeader">
-          <div>
-            <h2>Auto Replies</h2>
-            <p>Edit the WhatsApp messages Prosper sends for this listing.</p>
-          </div>
-          <label className="toggleRow">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
-              disabled={disabled}
-            />
-            Enabled
-          </label>
-          {dirty && <span className="badge warning">Unsaved</span>}
-        </div>
-
-        {disabled && <EmptyState title="Save listing first" body="Create the property before editing its Auto Replies." />}
-
-        <article className="replyGroup">
-          <header>
-            <strong>When Unit Is Available</strong>
-            <span>Prosper sends this after matching this property.</span>
-          </header>
-          <AutoReplySequence
-            field="availableInitial"
-            blocks={autoReplyBlocks(draft, "availableInitial")}
-            setDraft={setDraft}
-            disabled={disabled}
-          />
-          <div className="mediaStepNote"><ImageIcon size={17} /> Prosper sends this unit's media after the reply.</div>
-        </article>
-
-      </div>
-
-      <aside className="autoPreviewPane">
-        <div>
-          <span className="eyebrow">Available Preview</span>
-          <WhatsAppPreview property={property} blocks={draft.initial_reply_blocks} config={config} />
-        </div>
-      </aside>
-    </section>
-  );
-}
-
-function AutoReplySequence({
-  field,
-  blocks,
-  setDraft,
-  disabled,
-}: {
-  field: AutoReplyField;
-  blocks: PlaybookBlock[];
-  setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  disabled: boolean;
-}) {
-  function commit(nextBlocks: PlaybookBlock[]) {
-    setDraft((current) => playbookWithAutoReplyBlocks(current, field, nextBlocks));
-  }
-
-  function updateBlock(index: number, patch: Partial<PlaybookBlock>) {
-    commit(blocks.map((block, blockIndex) => blockIndex === index ? { ...block, ...patch } : block));
-  }
-
-  function appendPlaceholder(index: number, placeholder: string) {
-    const block = blocks[index];
-    if (block?.type !== "message") return;
-    updateBlock(index, { text: `${block.text ?? ""}${placeholder}` });
-  }
-
-  function addMessage() {
-    const nextBlocks: PlaybookBlock[] = [...blocks];
-    if (nextBlocks.length > 0) nextBlocks.push({ type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS });
-    nextBlocks.push({ type: "message", text: "" });
-    commit(nextBlocks);
-  }
-
-  function removeBlock(index: number) {
-    const nextBlocks = blocks.filter((_, blockIndex) => blockIndex !== index);
-    commit(nextBlocks.length > 0 ? nextBlocks : DEFAULT_AUTO_REPLY_SEQUENCES[field]);
-  }
-
-  return (
-    <div className="autoReplySequence">
-      {blocks.map((block, index) => (
-        block.type === "delay" ? (
-          <div className="autoReplyDelay" key={`${block.type}-${index}`}>
-            <Clock size={16} />
-            <span>Wait</span>
-            <input
-              type="number"
-              min="0"
-              max="30"
-              step="0.5"
-              value={block.seconds ?? DEFAULT_MESSAGE_DELAY_SECONDS}
-              onChange={(event) => updateBlock(index, { seconds: Number(event.target.value) })}
-              disabled={disabled}
-            />
-            <span>seconds</span>
-            <button type="button" className="iconButton" onClick={() => removeBlock(index)} disabled={disabled} aria-label="Remove delay">
-              <Trash2 size={15} />
-            </button>
-          </div>
-        ) : (
-          <label className="autoReplyTextarea" key={`${block.type}-${index}`}>
-            <span>Message {messageNumber(blocks, index)}</span>
-            <textarea rows={4} value={block.text ?? ""} onChange={(event) => updateBlock(index, { text: event.target.value })} disabled={disabled} />
-            <div className="placeholderRow">
-              {PLACEHOLDERS.map((placeholder) => (
-                <button key={placeholder} type="button" onClick={() => appendPlaceholder(index, placeholder)} disabled={disabled}>
-                  {placeholder}
-                </button>
-              ))}
-              {blocks.filter((item) => item.type === "message").length > 1 && (
-                <button type="button" className="dangerTextButton" onClick={() => removeBlock(index)} disabled={disabled}>
-                  <Trash2 size={14} /> Remove
-                </button>
-              )}
-            </div>
-          </label>
-        )
-      ))}
-      <button type="button" className="secondaryButton autoReplyAddButton" onClick={addMessage} disabled={disabled}>
-        <Plus size={16} /> Add message
-      </button>
-    </div>
-  );
-}
-
-function messageNumber(blocks: PlaybookBlock[], index: number): number {
-  return blocks.slice(0, index + 1).filter((block) => block.type === "message").length;
-}
-
-function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecord | null; blocks: PlaybookBlock[]; config: Record<string, string> }) {
-  return (
-    <div className="phoneShell">
-      <div className="phoneHeader">
-        <ChevronLeft size={20} />
-        <div className="phoneAvatar">{initials("Sarah Tan")}</div>
-        <div><strong>Sarah Tan (Lead)</strong><span>online</span></div>
-        <Phone size={17} />
-      </div>
-      <div className="phoneBody">
-        <span className="todayPill">Today</span>
-        <div className="phoneBubble inbound">Hi, I'm interested in {property?.property_name || "this unit"}. Is it still available?</div>
-        {blocks.map((block, index) => {
-          if (block.type === "delay") return <div key={index} className="delayPill">{block.seconds ?? 1}s delay</div>;
-          if (block.type === "gallery") {
-            return (
-              <div key={index} className="phoneBubble outbound mediaBubble">
-                <GalleryPreview media={property?.media.filter((item) => item.enabled) ?? []} />
-              </div>
-            );
-          }
-          const text = block.text || "";
-          return <div key={index} className="phoneBubble outbound">{replacePlaceholders(text, property, config)}</div>;
-        })}
-      </div>
-      <div className="phoneComposer"><span>Type a message</span><Send size={15} /></div>
-    </div>
-  );
-}
-
-function Field({ label, children, wide = false, required = false, error = "" }: { label: string; children: React.ReactNode; wide?: boolean; required?: boolean; error?: string }) {
-  return (
-    <label className={classNames("field", wide && "wide", error && "error")}>
-      <span>{label}{required && <b aria-label="required">*</b>}</span>
-      {children}
-      {error && <em>{error}</em>}
-    </label>
-  );
-}
-
-function EditorPanel({ title, body, children }: { title: string; body: string; children: React.ReactNode }) {
-  return (
-    <article className="editorPanel">
-      <div className="panelIntro"><h2>{title}</h2><p>{body}</p></div>
-      <div className="formGrid">{children}</div>
-    </article>
   );
 }
 

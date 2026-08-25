@@ -1,0 +1,374 @@
+.propertyEditorPage {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 64px);
+  background: #fff;
+}
+
+.editorHeader {
+  height: 70px;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.editorHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.editorHeader h2 {
+  margin: 0;
+}
+
+.editorProgress {
+  height: 4px;
+  flex: 0 0 auto;
+  background: var(--surface-mid);
+}
+
+.editorProgress span {
+  display: block;
+  height: 100%;
+  background: var(--green-dark);
+}
+
+.editorLayout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+
+.sectionNav {
+  border-right: 1px solid var(--border);
+  padding: 28px 18px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.sectionNav strong {
+  font-size: 20px;
+  margin-bottom: 18px;
+}
+
+.sectionNav button {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  min-height: 46px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 800;
+  text-align: left;
+}
+
+.sectionNav button.active {
+  border-color: #000;
+  background: var(--surface-low);
+}
+
+.sectionNav svg {
+  color: var(--green-dark);
+}
+
+.editorContent {
+  overflow-y: auto;
+  padding: 36px 36px 96px;
+}
+
+.editorPanel {
+  max-width: 940px;
+  display: grid;
+  gap: 26px;
+}
+
+.panelIntro h2 {
+  margin: 0 0 8px;
+  font-size: 26px;
+}
+
+.panelIntro p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+.field span {
+  color: #4d5356;
+  font-size: 13px;
+}
+
+.field span b {
+  color: #dc2626;
+  margin-left: 4px;
+}
+
+.field.error input,
+.field.error select,
+.field.error textarea {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.field em {
+  color: #b91c1c;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.galleryGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 14px;
+}
+
+.galleryGrid [role="application"],
+.galleryGrid [data-rbd-droppable-id] {
+  display: contents;
+}
+
+.galleryTile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  background: #fff;
+}
+
+.galleryTile.dragging {
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.16);
+  z-index: 2;
+}
+
+.galleryTileHeader,
+.mediaControls,
+.mediaToggle,
+.inlineForm {
+  display: flex;
+  align-items: center;
+}
+
+.galleryTileHeader {
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.galleryTile img,
+.galleryTile video,
+.galleryTile > svg {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--surface-mid);
+}
+
+.galleryTile label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.galleryTile span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.mediaControls {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mediaToggle {
+  gap: 7px;
+  color: #4d5356;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.mediaToggle input {
+  accent-color: #000;
+}
+
+.inlineForm {
+  grid-column: 1 / -1;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.inlineForm input,
+.inlineForm select {
+  flex: 1;
+  min-width: 0;
+}
+
+.galleryAddForm .mediaToggle {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.uploadDrop {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--border);
+  background: var(--surface-low);
+  border-radius: 8px;
+  min-height: 80px;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  color: #4d5356;
+  font-weight: 800;
+}
+
+.uploadDrop.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.uploadDrop input {
+  display: none;
+}
+
+.dragHandle {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.dragHandle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.editorStickyActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 24px;
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.editorStickyActionGroup {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .propertyEditorPage {
+    min-height: 0;
+  }
+
+  .editorHeader {
+    height: auto;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .editorHeaderActions {
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .editorHeaderActions button,
+  .editorHeader > button {
+    flex: 1 1 120px;
+  }
+
+  .editorLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionNav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+
+  .sectionNav strong {
+    display: none;
+  }
+
+  .sectionNav button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    gap: 10px;
+  }
+
+  .editorContent {
+    padding: 16px 16px 88px;
+  }
+
+  .editorPanel {
+    gap: 18px;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineForm {
+    flex-wrap: wrap;
+  }
+
+  .editorStickyActions {
+    padding: 10px 12px;
+  }
+
+  .editorStickyActionGroup {
+    flex-wrap: wrap;
+  }
+}
