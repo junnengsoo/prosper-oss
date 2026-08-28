@@ -1,0 +1,337 @@
+.autoRepliesLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 22px;
+  align-items: start;
+}
+
+.autoRepliesForm {
+  display: grid;
+  gap: 16px;
+}
+
+.autoRepliesHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.autoRepliesHeader h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.autoRepliesHeader p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.replyGroup {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+}
+
+.replyGroup header {
+  display: grid;
+  gap: 3px;
+}
+
+.replyGroup header strong {
+  font-size: 15px;
+}
+
+.replyGroup header span,
+.autoReplyTextarea > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.autoReplyTextarea {
+  display: grid;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.autoReplyTextarea.dragging,
+.autoReplyDelay.dragging {
+  background: #fff;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.16);
+  z-index: 2;
+}
+
+.autoReplyTextarea > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.autoReplyTextarea textarea {
+  min-height: 92px;
+}
+
+.autoReplySequence {
+  display: grid;
+  gap: 10px;
+}
+
+.autoReplyDelay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-low);
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.autoReplyDelay input {
+  width: 68px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-weight: 800;
+}
+
+.autoReplyDelay .iconButton {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+}
+
+.autoReplyAddButton {
+  justify-self: start;
+}
+
+.dangerTextButton {
+  color: var(--danger) !important;
+}
+
+.mediaStepNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface-low);
+  color: var(--muted);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.autoPreviewPane {
+  position: sticky;
+  top: 82px;
+  display: grid;
+  gap: 18px;
+}
+
+.autoPreviewPane > div {
+  display: grid;
+  gap: 8px;
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.autoPreviewPane .phoneShell {
+  width: 300px;
+  height: 420px;
+  border-width: 6px;
+  border-radius: 28px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12);
+}
+
+.autoPreviewPane .phoneHeader {
+  height: 54px;
+}
+
+.autoPreviewPane .phoneBody {
+  padding: 10px;
+  gap: 8px;
+}
+
+.autoPreviewPane .phoneComposer {
+  height: 42px;
+}
+
+.toggleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  background: var(--surface-low);
+  border-radius: 7px;
+  padding: 9px 12px;
+}
+
+.placeholderRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.placeholderRow button {
+  border: 0;
+  background: var(--surface-mid);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #4d5356;
+}
+
+.phoneShell {
+  width: 330px;
+  height: 650px;
+  background: #111;
+  border: 8px solid #181818;
+  border-radius: 34px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.16);
+}
+
+.phoneHeader {
+  height: 64px;
+  background: #006d5b;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.phoneHeader span {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.phoneAvatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface-mid);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+}
+
+.phoneBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background:
+    linear-gradient(140deg, rgba(255,255,255,0.92), rgba(255,255,255,0.58)),
+    radial-gradient(circle at 20% 20%, #dde5e8, transparent 35%),
+    radial-gradient(circle at 80% 35%, #213140, transparent 42%);
+}
+
+.todayPill,
+.delayPill {
+  align-self: center;
+  border-radius: 999px;
+  background: #e4ffd6;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.delayPill {
+  background: rgba(0, 0, 0, 0.16);
+  color: #fff;
+  text-transform: none;
+}
+
+.phoneBubble {
+  max-width: 84%;
+  background: #fff;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  align-self: flex-start;
+}
+
+.phoneBubble.outbound {
+  align-self: flex-end;
+  background: #d8ffc4;
+}
+
+.mediaBubble {
+  width: 78%;
+  padding: 5px;
+}
+
+.phoneComposer {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f2f2;
+  padding: 8px;
+}
+
+.phoneComposer span {
+  flex: 1;
+  background: #fff;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 14px;
+}
+
+@media (max-width: 760px) {
+  .autoRepliesLayout,
+  .autoRepliesHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .autoReplyDelay,
+  .placeholderRow {
+    flex-wrap: wrap;
+  }
+
+  .autoReplyDelay .iconButton {
+    margin-left: 0;
+  }
+
+  .autoPreviewPane {
+    position: static;
+  }
+
+  .autoPreviewPane .phoneShell {
+    width: min(100%, 300px);
+    justify-self: center;
+  }
+
+  .phoneShell {
+    width: min(100%, calc(100vw - var(--rail) - 24px));
+  }
+}
