@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Prosper is being prepared for public technical review as a founding-engineer demo. The repository needs to show the implemented rental-enquiry workflow clearly without implying broader licensing, deployment, channel, or product commitments.
+Prosper is being prepared for public technical review. The repository needs to show the implemented rental-enquiry workflow clearly without implying broader licensing, deployment, channel, or product commitments.
 
 The current implemented surface is an inbound rental-enquiry pipeline with a local dashboard, local SQLite storage, DeepSeek-backed model stages, deterministic Playbook replies, and an optional Baileys WhatsApp Bridge.
 
