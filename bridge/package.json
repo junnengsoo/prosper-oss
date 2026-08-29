@@ -22,5 +22,8 @@
     "@types/qrcode-terminal": "^0.12.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "link-preview-js": "4.0.1"
   }
 }
