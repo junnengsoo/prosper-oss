@@ -242,6 +242,71 @@ def test_conversation_list_derives_latest_message_display_from_messages(api_clie
     assert "last_message_at" not in contact_row
 
 
+def test_simulator_api_latest_message_display_tracks_inbound_then_outbound_records(api_client, session, monkeypatch):
+    import app.routers.simulator as simulator_router
+
+    property_ = add_property(session, "RTF-API-LATEST")
+    upsert_property_playbook(
+        session,
+        property_.property_id,
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Automated reply for {property_name}"}]),
+    )
+    session.commit()
+
+    chat_jid = "api-latest@s.whatsapp.net"
+    inbound = api_client.post(
+        "/api/fake-chat/inbound",
+        json={
+            "chat_jid": chat_jid,
+            "text": "Hi, is 301C available?",
+            "display_name": "API Latest",
+            "message_id": "api-latest-inbound-1",
+            "timestamp_ms": 1_000,
+        },
+    )
+    assert inbound.status_code == 200
+
+    conversations = api_client.get("/api/conversations").json()
+    conversation_id = inbound.json()["conversation_id"]
+    row = next(item for item in conversations if item["id"] == conversation_id)
+
+    assert row["latest_message_text"] == "Hi, is 301C available?"
+    assert row["latest_message_timestamp_ms"] == 1_000
+    assert row["latest_message_direction"] == "inbound"
+    assert {"last_message_at", "latest_inbound_at", "latest_outbound_at"}.isdisjoint(row)
+
+    async def fake_matching(session_arg, conversation_id_arg):
+        conversation = session_arg.get(Conversation, conversation_id_arg)
+        conversation.matched_property_id = property_.property_id
+        conversation.current_stage = "rental_listing_matching"
+        return matched_listing_result(property_.property_id)
+
+    monkeypatch.setattr(simulator_router, "route_stored_conversation_after_inbound", fake_matching)
+
+    run = api_client.post(
+        "/api/fake-chat/inbound-and-run",
+        json={
+            "chat_jid": chat_jid,
+            "text": "Please send viewing slots.",
+            "display_name": "API Latest",
+            "message_id": "api-latest-inbound-2",
+            "timestamp_ms": 2_000,
+        },
+    )
+    assert run.status_code == 200
+    assert run.json()["result"]["send_result"]["status"] == "sent"
+
+    conversations = api_client.get("/api/conversations").json()
+    row = next(item for item in conversations if item["id"] == conversation_id)
+    messages = api_client.get(f"/api/conversations/{conversation_id}/messages").json()
+
+    assert [message["direction"] for message in messages] == ["inbound", "inbound", "outbound"]
+    assert row["latest_message_text"] == "Automated reply for 301C Punggol Central"
+    assert row["latest_message_direction"] == "outbound"
+    assert row["latest_message_timestamp_ms"] == messages[-1]["timestamp_ms"]
+    assert {"last_message_at", "latest_inbound_at", "latest_outbound_at"}.isdisjoint(row)
+
+
 def bridge_message(
     chat_jid: str,
     message_id: str,
