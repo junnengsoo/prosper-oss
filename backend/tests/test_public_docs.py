@@ -5,6 +5,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 README = (ROOT_DIR / "README.md").read_text()
 PROJECT_BRIEFING = (ROOT_DIR / "docs" / "project-presentation.md").read_text()
 TRADEOFF_INVENTORY = (ROOT_DIR / "docs" / "tradeoff-inventory.md").read_text()
+DOMAIN_GLOSSARY = (ROOT_DIR / "docs" / "domain-glossary.md").read_text()
+PUBLIC_BOUNDARY_ADR = (ROOT_DIR / "docs" / "adr" / "0001-public-reference-boundaries.md").read_text()
 PUBLIC_DOCS = [
     ROOT_DIR / "README.md",
     *sorted((ROOT_DIR / "docs").glob("**/*.md")),
@@ -129,3 +131,54 @@ def test_readme_documents_manual_walkthrough_and_release_boundaries():
     ]
 
     assert_contains_all(README, required_phrases)
+
+
+def test_schema_boundary_docs_explain_local_sqlite_production_boundaries():
+    assert_contains_all(
+        PUBLIC_BOUNDARY_ADR,
+        [
+            "Prosper uses local SQLite for this experimental repo",
+            "disposable local testing data",
+            "not production storage",
+            "production deployment would need a deliberate database redesign",
+            "schema changes are handled by resetting the local database",
+            "string listing identifiers",
+            "`property_type` field stays",
+            "intentional extension point",
+            "one active Conversation per Contact",
+            "Latest-message display state is derived from Messages",
+            "`conversation_id` is nullable",
+            "full input snapshots",
+            "raw-type marker records source event provenance",
+            "internal outbound action markers",
+            "only keys explicitly allowed by the backend contract may be written",
+            "auditability, provenance, local resettable storage",
+        ],
+    )
+
+
+def test_domain_glossary_explains_clean_schema_terms():
+    assert_contains_all(
+        DOMAIN_GLOSSARY,
+        [
+            "string Rental Listing ID",
+            "rental-focused in this release",
+            "listing `property_type` field is retained as intentional extensibility",
+            "`chat_jid` is the Contact identity",
+            "`display_name` and `phone` are optional channel metadata",
+            "phone metadata is not treated as tenant identity",
+            "A Contact can have historical Conversations",
+            "only one active Conversation per Contact",
+            "New Conversations for the same Contact are created only after the prior active Conversation is closed",
+            "`status` records lifecycle",
+            "`current_stage` records where the active workflow is routed",
+            "Lifecycle status and current pipeline stage are separate concepts",
+            "`conversation_id` is nullable by design",
+            "Pre-conversation triage",
+            "source event marker retained with a Message",
+            "supports provenance and auto-reply dedupe",
+            "Runtime Config has an allowed-key boundary",
+            "currently `pause_ai` and `send_lock`",
+            "Unknown config keys are rejected",
+        ],
+    )
