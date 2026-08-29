@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database.connection import SessionLocal, init_db
 from .database.seed import seed_all
-from .llm import flush_langfuse
 from .routers import auth, bridge, config_runtime, conversations, listings, simulator
 from .schemas import HealthOut
 
@@ -37,11 +36,6 @@ def startup() -> None:
     init_db()
     with SessionLocal() as session:
         seed_all(session)
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    flush_langfuse()
 
 
 @app.get("/health", response_model=HealthOut)

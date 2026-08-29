@@ -126,23 +126,8 @@ def record_stage_run(
 async def run_llm_stage(
     generator: JsonGenerator,
     messages: list[LlmMessage],
-    *,
-    stage: str,
-    conversation_id: int | None,
-    property_id: str | None = None,
-    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run one LLM stage with tracing metadata, or use an injected test generator."""
-    if generator is generate_json:
-        return await generate_json(
-            messages,
-            {
-                "stage": stage,
-                "conversation_id": conversation_id,
-                "property_id": property_id,
-                "metadata": metadata or {},
-            },
-        )
+    """Run one LLM stage, or use an injected test generator."""
     return await generator(messages)
 
 
@@ -226,9 +211,6 @@ async def run_triage_text(
         raw_result = await run_llm_stage(
             generator,
             llm_messages,
-            stage="triage",
-            conversation_id=conversation_id,
-            metadata={"persist_input_snapshot": persist_input_snapshot},
         )
     except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, ValueError) as error:
         result = manual_review_stage_result(str(error))
@@ -280,9 +262,6 @@ async def run_rental_listing_matching(
         raw_result = await run_llm_stage(
             generator,
             llm_messages,
-            stage="rental_listing_matching",
-            conversation_id=conversation_id,
-            metadata={"available_property_count": property_jsonl.count("\n") + 1 if property_jsonl else 0},
         )
     except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, ValueError) as error:
         result = manual_review_result({}, str(error))

@@ -40,7 +40,6 @@ class Conversation(TimestampMixin, Base):
             "contact_id",
             unique=True,
             sqlite_where=text("status = 'active'"),
-            postgresql_where=text("status = 'active'"),
         ),
     )
 

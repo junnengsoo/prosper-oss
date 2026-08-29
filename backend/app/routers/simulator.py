@@ -6,7 +6,6 @@ from ..auth import RequestContext
 from ..database.connection import get_session
 from ..database.models import Contact, Conversation, Message
 from ..dependencies import DashboardContext
-from ..llm import flush_langfuse
 from ..pipeline import (
     is_manual_review_result,
     route_stored_conversation_after_inbound,
@@ -87,7 +86,6 @@ async def fake_inbound_and_run(
             contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
             contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms or 0) if payload.timestamp_ms else contact.last_message_at
             session.commit()
-            flush_langfuse()
             return PipelineRunResponse(conversation_id=None, result={"triage": triage})
 
     message = handle_fake_inbound(session, payload)

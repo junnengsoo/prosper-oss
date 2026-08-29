@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from .actions import execute_outbound_action_plan, plan_outbound_actions
 from .database.models import Conversation, StageRun
-from .llm import flush_langfuse
 from .pipeline import mark_conversation_manual_review
 
 
@@ -34,7 +33,6 @@ async def attach_outbound_action_result(session: Session, result: dict, conversa
     if conversation_id is not None and "sent_actions" not in result:
         result = await execute_outbound_action_plan(session, conversation_id, result)
     result["outbound_actions"] = result.get("send_result", {"status": "not_attempted", "reason": "no_conversation"})
-    flush_langfuse()
     return result
 
 
