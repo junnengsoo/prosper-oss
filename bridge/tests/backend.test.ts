@@ -18,9 +18,11 @@ function message(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage 
 
 const originalFetch = globalThis.fetch;
 const originalBridgeToken = process.env.WHATSAPP_PA_BRIDGE_TOKEN;
+const originalProsperBridgeToken = process.env.PROSPER_BRIDGE_TOKEN;
 const calls: Array<{ url: string; init?: RequestInit }> = [];
 
-process.env.WHATSAPP_PA_BRIDGE_TOKEN = "test-secret-token";
+delete process.env.WHATSAPP_PA_BRIDGE_TOKEN;
+process.env.PROSPER_BRIDGE_TOKEN = "test-secret-token";
 
 globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
   calls.push({ url: String(url), init });
@@ -120,6 +122,11 @@ try {
     delete process.env.WHATSAPP_PA_BRIDGE_TOKEN;
   } else {
     process.env.WHATSAPP_PA_BRIDGE_TOKEN = originalBridgeToken;
+  }
+  if (originalProsperBridgeToken === undefined) {
+    delete process.env.PROSPER_BRIDGE_TOKEN;
+  } else {
+    process.env.PROSPER_BRIDGE_TOKEN = originalProsperBridgeToken;
   }
 }
 

@@ -6,7 +6,7 @@ Prosper is organized around a shared inbound rental-enquiry workflow with separa
 
 - `backend/app/pipeline.py` coordinates DeepSeek-backed triage and rental listing matching stages.
 - `backend/app/database/models.py` stores contacts, conversations, messages, stage runs, properties, Playbooks, and outbound state in one application scope.
-- `backend/app/database/connection.py` owns the SQLAlchemy engine, sessions, and table creation; `backend/app/database/seed.py` owns demo data.
+- `backend/app/database/connection.py` owns the SQLAlchemy engine, sessions, and table creation; `backend/app/database/seed.py` owns sample data.
 - `backend/app/schemas.py` defines the validated request and stage-result contracts.
 - `backend/app/actions.py` turns validated stage results into deterministic outbound actions.
 - `backend/app/services.py` owns message ingestion, deduplication, state checks, and bridge retries.

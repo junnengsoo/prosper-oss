@@ -132,7 +132,7 @@ function fakeSocket(calls: SendCall[], presenceCalls: PresenceCall[] = []): Send
   assert.doesNotThrow(() => assertBridgeStartupSafe("0.0.0.0", "configured-token"));
   assert.throws(
     () => assertBridgeStartupSafe("0.0.0.0", ""),
-    /WHATSAPP_PA_BRIDGE_TOKEN is required/,
+    /PROSPER_BRIDGE_TOKEN is required/,
   );
 }
 

@@ -15,14 +15,14 @@ def init_database() -> None:
     init_db()
     with SessionLocal() as session:
         seed_all(session)
-    print("Initialized Prosper database and seeded demo data.")
+    print("Initialized Prosper database and seeded sample data.")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prosper operator utilities")
     subcommands = parser.add_subparsers(dest="command")
 
-    subcommands.add_parser("init-db", help="Initialize the database and seed demo data")
+    subcommands.add_parser("init-db", help="Initialize the database and seed sample data")
     subcommands.add_parser("show-config", help="Show application config")
 
     set_config = subcommands.add_parser("set-config", help="Set one or more application config values")

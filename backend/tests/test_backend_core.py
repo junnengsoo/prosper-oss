@@ -150,6 +150,44 @@ def matched_listing_result(property_id: str = "RTF-001") -> dict:
     }
 
 
+def test_public_health_and_runtime_status_identify_prosper(api_client, monkeypatch):
+    async def fake_bridge_status(bridge_base_url):
+        return {"ok": True, "bridge": "prosper-bridge"}
+
+    monkeypatch.setattr("app.routers.config_runtime.fetch_bridge_status", fake_bridge_status)
+
+    assert api_client.get("/health").json() == {"ok": True, "app": "prosper"}
+
+    runtime = api_client.get("/api/runtime/status")
+    assert runtime.status_code == 200
+    assert runtime.json()["app"] == "prosper"
+    assert runtime.json()["bridge"]["bridge"] == "prosper-bridge"
+
+
+def test_prosper_bridge_token_configures_backend_bridge_auth(monkeypatch):
+    monkeypatch.setenv("PROSPER_BRIDGE_TOKEN", "prosper-secret")
+    monkeypatch.delenv("WHATSAPP_PA_BRIDGE_TOKEN", raising=False)
+    get_settings.cache_clear()
+    try:
+        from app.services import bridge_auth_headers
+
+        assert bridge_auth_headers() == {"x-whatsapp-bridge-token": "prosper-secret"}
+    finally:
+        get_settings.cache_clear()
+
+
+def test_legacy_bridge_token_remains_compatibility_alias(monkeypatch):
+    monkeypatch.delenv("PROSPER_BRIDGE_TOKEN", raising=False)
+    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "legacy-secret")
+    get_settings.cache_clear()
+    try:
+        from app.services import bridge_auth_headers
+
+        assert bridge_auth_headers() == {"x-whatsapp-bridge-token": "legacy-secret"}
+    finally:
+        get_settings.cache_clear()
+
+
 def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, session, monkeypatch):
     import app.routers.conversations as conversations_router
 
@@ -765,7 +803,8 @@ def test_bridge_send_retries_when_bridge_temporarily_not_connected(monkeypatch):
 
     monkeypatch.setattr("app.services.httpx.AsyncClient", FakeAsyncClient)
     monkeypatch.setattr("app.services.asyncio.sleep", fake_sleep)
-    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "backend-secret")
+    monkeypatch.setenv("PROSPER_BRIDGE_TOKEN", "backend-secret")
+    monkeypatch.delenv("WHATSAPP_PA_BRIDGE_TOKEN", raising=False)
     get_settings.cache_clear()
 
     try:
@@ -805,7 +844,8 @@ def test_backend_bridge_proxy_requests_attach_configured_token(monkeypatch):
             return httpx.Response(202, request=request, json={"ok": True, "status": "reconnecting"})
 
     monkeypatch.setattr("app.services.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "backend-secret")
+    monkeypatch.setenv("PROSPER_BRIDGE_TOKEN", "backend-secret")
+    monkeypatch.delenv("WHATSAPP_PA_BRIDGE_TOKEN", raising=False)
     get_settings.cache_clear()
     try:
         assert asyncio.run(fetch_bridge_status("http://bridge.test"))["ok"] is True

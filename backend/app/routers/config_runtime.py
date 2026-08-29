@@ -39,7 +39,7 @@ def patch_config(
 def export_config(session: Session = Depends(get_session), context: RequestContext = DashboardContext) -> ConfigExportOut:
     return ConfigExportOut(
         exported_at=datetime.now(),
-        app="whatsapp-pa",
+        app="prosper",
         config=get_all_config(session),
         properties=list(session.scalars(select(Property).order_by(Property.property_id)).all()),
         property_media=list(
@@ -90,7 +90,7 @@ async def runtime_status(
     _context: RequestContext = DashboardContext,
 ) -> dict[str, object]:
     return {
-        "app": "whatsapp-pa",
+        "app": "prosper",
         "config": get_all_config(session),
         "llm": llm_status(),
         "bridge": await fetch_bridge_status(get_settings().bridge_base_url),

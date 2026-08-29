@@ -23,4 +23,4 @@ The JSON files under `evals/` are intended for DeepSeek-backed runs. They test r
 
 ## What Is Not Claimed
 
-The evaluation set is a small reference suite, not a statistically representative benchmark. It is useful for regression detection and interview discussion, but it should not be presented as proof of general model accuracy.
+The evaluation set is a small reference suite, not a statistically representative benchmark. It is useful for regression detection and technical review, but it should not be presented as proof of general model accuracy.

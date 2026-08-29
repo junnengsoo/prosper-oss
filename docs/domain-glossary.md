@@ -36,7 +36,7 @@ The safe route when the system should not send an automated response. Manual rev
 
 ## Send Lock
 
-A local operator switch that prevents outbound action execution. It is useful for review demos where inbound processing and audit inspection should continue but tenant replies should not be sent.
+A local operator switch that prevents outbound action execution. It is useful for review walkthroughs where inbound processing and audit inspection should continue but tenant replies should not be sent.
 
 ## Reset-Only SQLite
 

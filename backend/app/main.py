@@ -8,7 +8,7 @@ from .routers import auth, bridge, config_runtime, conversations, listings, simu
 from .schemas import HealthOut
 
 
-app = FastAPI(title="WhatsApp PA MVP", version="0.1.0")
+app = FastAPI(title="Prosper", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -46,4 +46,4 @@ def shutdown() -> None:
 
 @app.get("/health", response_model=HealthOut)
 def health() -> HealthOut:
-    return HealthOut(ok=True, app="whatsapp-pa")
+    return HealthOut(ok=True, app="prosper")
