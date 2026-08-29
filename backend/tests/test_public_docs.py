@@ -18,14 +18,18 @@ def assert_contains_all(text: str, phrases: list[str]):
         assert phrase in text
 
 
-def test_readme_uses_public_reference_positioning_without_release_overclaiming():
+def test_readme_uses_experimental_single_user_positioning_without_release_overclaiming():
     lowered = README.lower()
 
-    assert "public rental-enquiry reference implementation" in lowered
+    assert "experimental rental-enquiry app" in lowered
+    assert "single-user workflow" in lowered
     assert "open-source" not in lowered
     assert "open source" not in lowered
     assert "production-ready" not in lowered
     assert "production ready" not in lowered
+    assert "reference implementation" not in lowered
+    assert "reviewing company" not in lowered
+    assert "founding engineer" not in lowered
 
 
 def test_readme_documents_supported_setup_and_deepseek_happy_path():
@@ -126,8 +130,9 @@ def test_readme_documents_manual_walkthrough_and_release_boundaries():
         "docs/project-presentation.md",
         "docs/tradeoff-inventory.md",
         "docs/domain-glossary.md",
-        "docs/adr/0001-public-reference-boundaries.md",
-        "history squash",
+        "single-user workflow",
+        "experimental scope",
+        "Manual Review",
     ]
 
     assert_contains_all(README, required_phrases)
