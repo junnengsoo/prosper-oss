@@ -30,10 +30,6 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-reasoner"
-    langfuse_public_key: str = ""
-    langfuse_secret_key: str = ""
-    langfuse_base_url: str = ""
-    langfuse_host: str = ""
     bridge_base_url: str = Field(
         default="http://127.0.0.1:8788",
         validation_alias=AliasChoices("PROSPER_BRIDGE_BASE_URL", "BRIDGE_BASE_URL"),
