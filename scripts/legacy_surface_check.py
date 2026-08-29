@@ -33,6 +33,10 @@ PATTERNS = [
     r"apply_outbound_action_plan",
     r"maybe_auto_send",
     r'__tablename__\s*=\s*"drafts"',
+    r"MESSAGE_BREAK_MARKER",
+    r"MEDIA_MARKER",
+    r"split_outbound_text",
+    r"split_outbound_parts",
 ]
 
 COMPILED = [(pattern, re.compile(pattern)) for pattern in PATTERNS]

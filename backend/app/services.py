@@ -12,31 +12,11 @@ from .database.models import AppConfig, Contact, Conversation, Message, Property
 from .normalize import extract_propertyguru_listing_id
 from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn
 from .app_config import get_config_value
-MESSAGE_BREAK_MARKER = "<message_break>"
-MEDIA_MARKER = "<media>"
 BRIDGE_SEND_RETRY_DELAYS_SECONDS = (1.0, 2.0)
 
 
 def now_ms() -> int:
     return int(time() * 1000)
-
-
-def split_outbound_text(text: str) -> list[str]:
-    return [part.strip() for part in text.split(MESSAGE_BREAK_MARKER) if part.strip()]
-
-
-def split_outbound_parts(text: str) -> list[tuple[str, str]]:
-    parts: list[tuple[str, str]] = []
-    for message_part in text.split(MESSAGE_BREAK_MARKER):
-        remaining = message_part
-        while MEDIA_MARKER in remaining:
-            before, remaining = remaining.split(MEDIA_MARKER, 1)
-            if before.strip():
-                parts.append(("text", before.strip()))
-            parts.append(("media", ""))
-        if remaining.strip():
-            parts.append(("text", remaining.strip()))
-    return parts
 
 
 def timestamp_to_datetime(timestamp_ms: int | None) -> datetime | None:
@@ -104,45 +84,6 @@ def close_conversation(session: Session, conversation: Conversation) -> Conversa
     return conversation
 
 
-def start_new_enquiry(session: Session, conversation: Conversation) -> Conversation:
-    contact = session.get(Contact, conversation.contact_id)
-    if not contact:
-        raise ValueError("Contact not found")
-    close_conversation(session, conversation)
-    session.flush()
-    next_conversation = Conversation(
-        contact_id=contact.id,
-        source=conversation.source,
-        status="active",
-        current_stage="rental_listing_matching",
-    )
-    session.add(next_conversation)
-    session.flush()
-    return next_conversation
-
-
-def resume_conversation_stage(
-    session: Session,
-    conversation: Conversation,
-    stage: str,
-    resume_contact: bool = True,
-) -> Conversation:
-    if conversation.status == "closed":
-        raise ValueError("Cannot resume a closed conversation; start a new enquiry instead")
-
-    conversation.status = "active"
-    conversation.current_stage = stage
-
-    if resume_contact:
-        contact = session.get(Contact, conversation.contact_id)
-        if not contact:
-            raise ValueError("Contact not found")
-        contact.status = "active"
-        contact.status_reason = "resumed_from_dashboard"
-
-    return conversation
-
-
 def append_message(
     session: Session,
     conversation: Conversation,
@@ -198,11 +139,6 @@ def pause_contact(session: Session, contact: Contact, reason: str) -> None:
 
 def ignore_contact(session: Session, contact: Contact, reason: str) -> None:
     contact.status = "ignored"
-    contact.status_reason = reason
-
-
-def cancel_contact(session: Session, contact: Contact, reason: str = "cancelled_from_dashboard") -> None:
-    contact.status = "paused"
     contact.status_reason = reason
 
 

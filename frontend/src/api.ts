@@ -125,12 +125,10 @@ export type StageRun = {
 };
 
 export type PlannedAction = {
-  action_type: string;
+  action_type: "send_playbook";
   stage: string;
   reason?: string;
   property_id?: string;
-  playbook_property_id?: string;
-  message?: string;
   blocks?: PlaybookBlock[];
 };
 
@@ -205,15 +203,6 @@ export type WhatsappQr = {
   qr_generation?: number;
   error?: string;
   detail?: string;
-};
-
-export type ConfigExport = {
-  exported_at: string;
-  app: string;
-  config: Record<string, string>;
-  properties: PropertyRecord[];
-  property_media: PropertyMedia[];
-  playbooks: PropertyPlaybook[];
 };
 
 export type FakeChatResetResult = {
@@ -291,7 +280,6 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status, status_reason }),
     }),
-  cancelContact: (contactId: number) => request<Contact>(`/api/contacts/${contactId}/cancel`, { method: "POST" }),
   conversations: (includeClosed = false) => request<Conversation[]>(`/api/conversations?include_closed=${includeClosed ? "true" : "false"}`),
   messages: (conversationId: number) => request<Message[]>(`/api/conversations/${conversationId}/messages`),
   properties: () => request<PropertyRecord[]>("/api/properties"),
@@ -306,7 +294,6 @@ export const api = {
   stageRuns: () => request<StageRun[]>("/api/stage-runs"),
   pipelineInspection: (conversationId: number) => request<PipelineInspection>(`/api/conversations/${conversationId}/inspection`),
   config: () => request<{ values: Record<string, string> }>("/api/config"),
-  exportConfig: () => request<ConfigExport>("/api/config/export"),
   runtimeStatus: () => request<RuntimeStatus>("/api/runtime/status"),
   whatsappConnection: () => request<WhatsappConnection>("/api/whatsapp/connection"),
   whatsappQr: () => request<WhatsappQr>("/api/whatsapp/qr"),
@@ -347,24 +334,4 @@ export const api = {
       body: JSON.stringify({ chat_jid, text, display_name }),
     }),
   resetFakeChat: () => request<FakeChatResetResult>("/api/fake-chat/reset", { method: "POST" }),
-  runInitialPipeline: (conversationId: number) =>
-    request<{ conversation_id: number; result: Record<string, unknown> }>(`/api/conversations/${conversationId}/run-initial-pipeline`, {
-      method: "POST",
-    }),
-  runNextPipeline: (conversationId: number) =>
-    request<{ conversation_id: number; result: Record<string, unknown> }>(`/api/conversations/${conversationId}/run-next`, {
-      method: "POST",
-    }),
-  closeConversation: (conversationId: number) =>
-    request<Conversation>(`/api/conversations/${conversationId}/close`, { method: "POST" }),
-  updateConversationStage: (conversationId: number, stage: "rental_listing_matching" | "end", resume_contact = true) =>
-    request<Conversation>(`/api/conversations/${conversationId}/stage`, {
-      method: "PATCH",
-      body: JSON.stringify({ stage, resume_contact }),
-    }),
-  startNewEnquiry: (conversationId: number, latest_message_text = "") =>
-    request<Conversation>(`/api/conversations/${conversationId}/start-new-enquiry`, {
-      method: "POST",
-      body: JSON.stringify({ latest_message_text }),
-    }),
 };

@@ -1,16 +1,11 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database.connection import get_session
-from ..database.models import Property, PropertyMedia
 from ..dependencies import DashboardContext
 from ..auth import RequestContext
-from ..playbooks import list_property_playbooks
-from ..schemas import AppConfigOut, AppConfigUpdate, ConfigExportOut
+from ..schemas import AppConfigOut, AppConfigUpdate
 from ..services import fetch_bridge_pairing_qr, fetch_bridge_status, get_all_config, request_bridge_reconnect, update_config
 
 router = APIRouter()
@@ -33,23 +28,6 @@ def patch_config(
         raise HTTPException(status_code=400, detail=str(error)) from error
     session.commit()
     return AppConfigOut(values=values)
-
-
-@router.get("/api/config/export", response_model=ConfigExportOut)
-def export_config(session: Session = Depends(get_session), context: RequestContext = DashboardContext) -> ConfigExportOut:
-    return ConfigExportOut(
-        exported_at=datetime.now(),
-        app="prosper",
-        config=get_all_config(session),
-        properties=list(session.scalars(select(Property).order_by(Property.property_id)).all()),
-        property_media=list(
-            session.scalars(
-                select(PropertyMedia)
-                .order_by(PropertyMedia.property_id, PropertyMedia.sort_order, PropertyMedia.id)
-            ).all()
-        ),
-        playbooks=list_property_playbooks(session),
-    )
 
 
 def llm_status() -> dict[str, object]:

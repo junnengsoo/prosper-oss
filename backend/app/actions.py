@@ -23,7 +23,6 @@ from .services import (
     list_property_media,
     send_property_media_via_bridge,
     send_via_bridge,
-    split_outbound_parts,
 )
 
 
@@ -35,10 +34,7 @@ class OutboundAction:
     stage: str
     reason: str = ""
     property_id: str | None = None
-    playbook_property_id: str | None = None
-    message: str = ""
     blocks: list[dict[str, Any]] | None = None
-    diagnostic: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a compact JSON-friendly representation for API inspection."""
@@ -126,15 +122,13 @@ def _playbook_action(
     property_id: str | None,
     reason: str = "",
 ) -> OutboundAction | None:
-    playbook_property_id = property_id
-    playbook = get_property_playbook(session, playbook_property_id) if playbook_property_id else None
+    playbook = get_property_playbook(session, property_id) if property_id else None
     blocks = enabled_blocks_for_stage(playbook, field_name)
     if blocks:
         return OutboundAction(
             action_type="send_playbook",
             stage=stage,
             property_id=property_id,
-            playbook_property_id=playbook_property_id,
             blocks=blocks,
             reason=reason,
         )
@@ -174,15 +168,6 @@ def _latest_message_for_conversation(session: Session, conversation_id: int) -> 
     )
 
 
-def _render_action_text(session: Session, action: OutboundAction) -> str:
-    """Render the text body for a planned action using direct messages or config snippets."""
-    if action.action_type == "send_message":
-        return action.message.strip()
-    if action.action_type == "send_playbook":
-        return ""
-    return ""
-
-
 def _render_action_parts(
     session: Session,
     conversation: Conversation,
@@ -190,7 +175,7 @@ def _render_action_parts(
 ) -> tuple[list[RenderedPlaybookPart], list[PropertyMedia]]:
     """Render an action into structured text/delay/gallery parts and fallback media."""
     if action.action_type == "send_playbook" and action.blocks:
-        property_ = _property_for_conversation(session, conversation, action.playbook_property_id or action.property_id)
+        property_ = _property_for_conversation(session, conversation, action.property_id)
         rendered = render_playbook_blocks(
             session,
             action.blocks,
@@ -199,15 +184,10 @@ def _render_action_parts(
         has_gallery = any(part.type == "gallery" for part in rendered)
         if not has_gallery:
             return rendered, []
-        media_property_id = action.property_id or action.playbook_property_id
-        media_items = list_property_media(session, media_property_id) if media_property_id else []
+        media_items = list_property_media(session, action.property_id) if action.property_id else []
         return rendered, media_items
 
-    text = _render_action_text(session, action)
-    rendered: list[RenderedPlaybookPart] = []
-    for part_type, value in split_outbound_parts(text):
-        rendered.append(RenderedPlaybookPart("gallery" if part_type == "media" else "text", text=value))
-    return rendered, []
+    return [], []
 
 
 def _send_block_reason(session: Session, conversation: Conversation) -> str | None:
@@ -367,17 +347,6 @@ async def execute_outbound_action_plan(session: Session, conversation_id: int, p
     actions = plan_outbound_actions(conversation, pipeline_result, session)
     if actions:
         pipeline_result["planned_actions"] = [action.to_dict() for action in actions]
-    needs_review_action = next((action for action in actions if action.action_type == "needs_review"), None)
-    if needs_review_action:
-        conversation.status = "needs_review"
-        conversation.current_stage = "needs_review"
-        pipeline_result["send_result"] = {
-            "status": "needs_review",
-            "reason": needs_review_action.reason,
-            "diagnostic": needs_review_action.diagnostic or {},
-        }
-        _record_outbound_action_audit(session, conversation, pipeline_result)
-        return pipeline_result
     if not actions:
         pipeline_result["send_result"] = {"status": "not_attempted", "reason": "no_planned_actions"}
         _record_outbound_action_audit(session, conversation, pipeline_result)
