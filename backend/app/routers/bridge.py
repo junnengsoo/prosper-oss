@@ -19,7 +19,6 @@ from ..services import (
     get_or_create_contact,
     handle_bridge_inbound,
     is_ai_paused,
-    timestamp_to_datetime,
 )
 
 router = APIRouter()
@@ -95,7 +94,6 @@ async def bridge_inbound(
         triage = await run_triage_text(session, payload.text, conversation_id=None, persist_input_snapshot=False)
         if not triage_is_initial_enquiry(triage) and triage.get("stage_status") != "manual_review":
             contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
-            contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms)
             session.commit()
             return BridgeAck(
                 accepted=True,
@@ -144,7 +142,6 @@ async def bridge_inbound_batch(
             if not triage_is_initial_enquiry(pretriage_result) and pretriage_result.get("stage_status") != "manual_review":
                 latest = max(payload.messages, key=lambda message: message.timestamp_ms)
                 contact = get_or_create_contact(session, latest.chat_jid, latest.display_name)
-                contact.last_message_at = timestamp_to_datetime(latest.timestamp_ms)
                 session.commit()
                 return BridgeAck(
                     accepted=True,

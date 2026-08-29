@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 from time import time
 
 import httpx
@@ -17,12 +16,6 @@ BRIDGE_SEND_RETRY_DELAYS_SECONDS = (1.0, 2.0)
 
 def now_ms() -> int:
     return int(time() * 1000)
-
-
-def timestamp_to_datetime(timestamp_ms: int | None) -> datetime | None:
-    if timestamp_ms is None:
-        return None
-    return datetime.fromtimestamp(timestamp_ms / 1000)
 
 
 def bridge_auth_headers() -> dict[str, str]:
@@ -114,8 +107,6 @@ def append_message(
         timestamp_ms=timestamp_ms,
     )
     session.add(message)
-    conversation.latest_inbound_at = timestamp_to_datetime(timestamp_ms) if direction == "inbound" else conversation.latest_inbound_at
-    conversation.latest_outbound_at = timestamp_to_datetime(timestamp_ms) if direction in {"outbound", "human"} else conversation.latest_outbound_at
     session.flush()
     return message
 
@@ -150,13 +141,13 @@ def handle_bridge_inbound(session: Session, payload: BridgeInboundMessage) -> tu
     contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
     if payload.from_me and stored_message_exists(session, payload.chat_jid, payload.message_id):
         return True, "duplicate_from_me_ignored", {"contact_id": contact.id}
-    contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms)
 
     conversation = get_active_conversation(session, contact.id)
 
     if not payload.from_me and is_reset_command(payload.text):
         if conversation:
             close_conversation(session, conversation)
+            session.flush()
         contact.status = "active"
         contact.status_reason = "reset_by_whatsapp_command"
         new_conversation = get_or_create_active_conversation(session, contact, "whatsapp")
@@ -228,7 +219,6 @@ def handle_fake_inbound(session: Session, payload: FakeInboundMessage) -> Messag
     timestamp_ms = payload.timestamp_ms or now_ms()
     message_id = payload.message_id or f"fake-{timestamp_ms}"
     contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
-    contact.last_message_at = timestamp_to_datetime(timestamp_ms)
     conversation = get_or_create_active_conversation(session, contact, "fake_chat")
     return append_message(
         session,

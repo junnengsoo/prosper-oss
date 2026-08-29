@@ -16,10 +16,10 @@ from app.actions import execute_outbound_action_plan, plan_outbound_actions
 from app.auth import CurrentUser, RequestContext, current_user_from_session
 from app.config import get_settings
 from app.database.connection import Base, get_session
-from app.database.models import Message, Property, PropertyMedia, PropertyPlaybook, StageRun
+from app.database.models import Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
-from app.schemas import BridgeInboundMessage, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
+from app.schemas import BridgeInboundMessage, ContactOut, ConversationOut, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
 from app.database.seed import seed_all
 import app.pipeline as pipeline_module
 from app.services import (
@@ -148,6 +148,157 @@ def matched_listing_result(property_id: str = "RTF-001") -> dict:
             "reason": "matched test property",
         }
     }
+
+
+def test_message_timestamp_caches_are_removed_from_models_and_public_contracts():
+    assert "last_message_at" not in Contact.__table__.columns
+    assert "latest_inbound_at" not in Conversation.__table__.columns
+    assert "latest_outbound_at" not in Conversation.__table__.columns
+    assert "last_message_at" not in ContactOut.model_fields
+    assert "latest_inbound_at" not in ConversationOut.model_fields
+    assert "latest_outbound_at" not in ConversationOut.model_fields
+
+
+def test_conversation_list_derives_latest_message_display_from_messages(api_client, session):
+    contact = get_or_create_contact(session, "derive-latest@s.whatsapp.net", "Derived Latest")
+    conversation = get_or_create_active_conversation(session, contact, "whatsapp")
+    conversation.matched_property_id = "RTF-001"
+    append_message(
+        session,
+        conversation,
+        contact.chat_jid,
+        "older-inbound",
+        "Can view this unit?",
+        1_000,
+        "inbound",
+        "whatsapp",
+        contact.chat_jid,
+        "text",
+    )
+    append_message(
+        session,
+        conversation,
+        contact.chat_jid,
+        "newer-outbound",
+        "Yes, viewing is available tomorrow.",
+        2_000,
+        "outbound",
+        "whatsapp",
+        None,
+        "action_send",
+    )
+    older_contact = get_or_create_contact(session, "older-thread@s.whatsapp.net", "Older Thread")
+    older_conversation = get_or_create_active_conversation(session, older_contact, "whatsapp")
+    append_message(
+        session,
+        older_conversation,
+        older_contact.chat_jid,
+        "older-thread-message",
+        "Earlier follow-up",
+        1_500,
+        "inbound",
+        "whatsapp",
+        older_contact.chat_jid,
+        "text",
+    )
+    session.commit()
+
+    conversations = api_client.get("/api/conversations").json()
+    row = next(item for item in conversations if item["id"] == conversation.id)
+    conversation_ids = [item["id"] for item in conversations]
+
+    assert row["latest_message_text"] == "Yes, viewing is available tomorrow."
+    assert row["latest_message_timestamp_ms"] == 2_000
+    assert row["latest_message_direction"] == "outbound"
+    assert conversation_ids.index(conversation.id) < conversation_ids.index(older_conversation.id)
+    assert "latest_inbound_at" not in row
+    assert "latest_outbound_at" not in row
+
+    contacts = api_client.get("/api/contacts").json()
+    contact_row = next(item for item in contacts if item["id"] == contact.id)
+    assert "last_message_at" not in contact_row
+
+
+def bridge_message(
+    chat_jid: str,
+    message_id: str,
+    text: str,
+    timestamp_ms: int,
+    *,
+    from_me: bool = False,
+) -> BridgeInboundMessage:
+    return BridgeInboundMessage(
+        chat_jid=chat_jid,
+        message_id=message_id,
+        text=text,
+        timestamp_ms=timestamp_ms,
+        from_me=from_me,
+        sender_jid="agent@s.whatsapp.net" if from_me else chat_jid,
+        display_name="Tenant",
+        raw_type="text",
+    )
+
+
+def test_bridge_inbound_paths_record_only_message_backed_activity(session):
+    accepted, reason, data = handle_bridge_inbound(
+        session,
+        bridge_message("active@s.whatsapp.net", "inbound-1", "Hi 301C", 1_000),
+    )
+    assert accepted is True
+    assert reason == "stored_inbound_message"
+    active_conversation = session.get(Conversation, data["conversation_id"])
+    assert active_conversation is not None
+    assert outbound_texts(session, active_conversation.id) == []
+    assert session.scalar(
+        select(Message.direction).where(Message.conversation_id == active_conversation.id, Message.message_id == "inbound-1")
+    ) == "inbound"
+
+    accepted, reason, data = handle_bridge_inbound(
+        session,
+        bridge_message("active@s.whatsapp.net", "human-1", "I will take over", 2_000, from_me=True),
+    )
+    assert accepted is True
+    assert reason == "human_reply_paused_contact"
+    assert session.get(Contact, active_conversation.contact_id).status == "paused"
+    assert session.scalar(
+        select(Message.direction).where(Message.conversation_id == active_conversation.id, Message.message_id == "human-1")
+    ) == "human"
+
+    accepted, reason, data = handle_bridge_inbound(
+        session,
+        bridge_message("active@s.whatsapp.net", "paused-1", "Still interested", 3_000),
+    )
+    assert accepted is True
+    assert reason == "contact_paused"
+    assert data["message_id"] is not None
+    assert session.scalar(
+        select(Message.direction).where(Message.conversation_id == active_conversation.id, Message.message_id == "paused-1")
+    ) == "inbound"
+
+    ignored_contact = get_or_create_contact(session, "ignored@s.whatsapp.net", "Ignored Tenant")
+    ignore_count_before = session.scalar(select(Message.id).where(Message.chat_jid == ignored_contact.chat_jid)) is not None
+    ignored_contact.status = "ignored"
+    accepted, reason, data = handle_bridge_inbound(
+        session,
+        bridge_message("ignored@s.whatsapp.net", "ignored-1", "Please reply", 4_000),
+    )
+    assert accepted is True
+    assert reason == "contact_ignored"
+    assert data["contact_id"] == ignored_contact.id
+    assert (session.scalar(select(Message.id).where(Message.chat_jid == ignored_contact.chat_jid)) is not None) == ignore_count_before
+
+    reset_contact = get_or_create_contact(session, "reset@s.whatsapp.net", "Reset Tenant")
+    old_conversation = get_or_create_active_conversation(session, reset_contact, "whatsapp")
+    accepted, reason, data = handle_bridge_inbound(
+        session,
+        bridge_message("reset@s.whatsapp.net", "reset-1", "!reset", 5_000),
+    )
+    assert accepted is True
+    assert reason == "contact_reset_by_command"
+    assert data["closed_conversation_id"] == old_conversation.id
+    assert data["message_id"] is None
+    assert session.get(Conversation, old_conversation.id).status == "closed"
+    assert session.get(Conversation, data["conversation_id"]).status == "active"
 
 
 def test_public_health_and_runtime_status_identify_prosper(api_client, monkeypatch):

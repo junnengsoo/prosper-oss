@@ -329,7 +329,6 @@ async def _send_action(
             "action_send",
         )
 
-    conversation.latest_outbound_at = sent_at
     return SentActionResult("sent", action.to_dict(), "sent", bridge_message_ids)
 
 

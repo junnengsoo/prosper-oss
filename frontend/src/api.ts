@@ -16,7 +16,6 @@ export type Contact = {
   phone: string | null;
   status: string;
   status_reason: string | null;
-  last_message_at: string | null;
 };
 
 export type Me = {
