@@ -14,9 +14,11 @@ export type Contact = {
   chat_jid: string;
   display_name: string | null;
   phone: string | null;
-  status: string;
+  status: ContactStatus;
   status_reason: string | null;
 };
+
+export type ContactStatus = "active" | "paused" | "ignored";
 
 export type Me = {
   auth_user_id: string;
@@ -32,13 +34,16 @@ export type Conversation = {
   id: number;
   contact_id: number;
   source: string;
-  status: string;
-  current_stage: string | null;
+  status: ConversationLifecycleStatus;
+  current_stage: ConversationPipelineStage | null;
   matched_property_id: string | null;
   latest_message_text: string | null;
   latest_message_timestamp_ms: number | null;
   latest_message_direction: string | null;
 };
+
+export type ConversationLifecycleStatus = "active" | "closed";
+export type ConversationPipelineStage = "rental_listing_matching" | "manual_review" | "end";
 
 export type Message = {
   id: number;
@@ -148,7 +153,7 @@ export type PipelineInspection = {
 
 export type RuntimeStatus = {
   app: string;
-  config: Record<string, string>;
+  config: RuntimeConfigValues;
   llm?: {
     provider: string;
     configured: boolean;
@@ -181,6 +186,9 @@ export type RuntimeStatus = {
     url?: string;
   };
 };
+
+export type RuntimeConfigKey = "pause_ai" | "send_lock";
+export type RuntimeConfigValues = Partial<Record<RuntimeConfigKey, string>>;
 
 export type WhatsappConnection = {
   state: "connected" | "connecting" | "qr_available" | "qr_expired" | "bridge_offline" | "needs_reauth" | "disconnected" | string;
@@ -274,7 +282,7 @@ export const api = {
   authLogout: () => request<AuthSession>("/api/auth/logout", { method: "POST" }),
   me: () => request<Me>("/api/me"),
   contacts: () => request<Contact[]>("/api/contacts"),
-  updateContactStatus: (contactId: number, status: "active" | "paused" | "ignored", status_reason = "") =>
+  updateContactStatus: (contactId: number, status: ContactStatus, status_reason = "") =>
     request<Contact>(`/api/contacts/${contactId}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status, status_reason }),
@@ -292,14 +300,14 @@ export const api = {
     }),
   stageRuns: () => request<StageRun[]>("/api/stage-runs"),
   pipelineInspection: (conversationId: number) => request<PipelineInspection>(`/api/conversations/${conversationId}/inspection`),
-  config: () => request<{ values: Record<string, string> }>("/api/config"),
+  config: () => request<{ values: RuntimeConfigValues }>("/api/config"),
   runtimeStatus: () => request<RuntimeStatus>("/api/runtime/status"),
   whatsappConnection: () => request<WhatsappConnection>("/api/whatsapp/connection"),
   whatsappQr: () => request<WhatsappQr>("/api/whatsapp/qr"),
   reconnectWhatsapp: (clearAuth = false) =>
     request<Record<string, unknown>>(`/api/whatsapp/reconnect?clear_auth=${clearAuth ? "true" : "false"}`, { method: "POST" }),
-  updateConfig: (values: Record<string, string>) =>
-    request<{ values: Record<string, string> }>("/api/config", { method: "PATCH", body: JSON.stringify({ values }) }),
+  updateConfig: (values: RuntimeConfigValues) =>
+    request<{ values: RuntimeConfigValues }>("/api/config", { method: "PATCH", body: JSON.stringify({ values }) }),
   upsertProperty: (property: PropertyInput) =>
     request<PropertyRecord>("/api/properties", { method: "POST", body: JSON.stringify(property) }),
   deleteProperty: (propertyId: string) =>

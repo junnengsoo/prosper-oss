@@ -9,7 +9,7 @@ from .config import get_settings
 from .media_storage import describe_media_storage
 from .database.models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from .normalize import extract_propertyguru_listing_id
-from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn
+from .schemas import BridgeInboundMessage, FakeInboundMessage, PropertyIn, PropertyMediaIn, SUPPORTED_RUNTIME_CONFIG_KEYS
 from .app_config import get_config_value
 BRIDGE_SEND_RETRY_DELAYS_SECONDS = (1.0, 2.0)
 
@@ -394,6 +394,9 @@ def validate_config_update(values: dict[str, str]) -> dict[str, str]:
         if not isinstance(key, str) or not key.strip():
             raise ValueError("Config key must not be blank")
         normalized_key = key.strip()
+        if normalized_key not in SUPPORTED_RUNTIME_CONFIG_KEYS:
+            supported = ", ".join(sorted(SUPPORTED_RUNTIME_CONFIG_KEYS))
+            raise ValueError(f"Unsupported config key {normalized_key!r}. Supported keys: {supported}")
         normalized_value = str(value)
         if normalized_key in BOOLEAN_CONFIG_KEYS:
             boolean_value = normalized_value.strip().lower()

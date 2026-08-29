@@ -5,7 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 ContactStatus = Literal["active", "paused", "ignored"]
-ConversationStatus = Literal["active", "paused", "handover", "closed"]
+ConversationLifecycleStatus = Literal["active", "closed"]
+ConversationPipelineStage = Literal["rental_listing_matching", "manual_review", "end"]
+RuntimeConfigKey = Literal["pause_ai", "send_lock"]
+SUPPORTED_RUNTIME_CONFIG_KEYS = {"pause_ai", "send_lock"}
 MessageDirection = Literal["inbound", "outbound", "human"]
 MessageSource = Literal["whatsapp", "fake_chat"]
 MediaType = Literal["photo", "video"]
@@ -30,7 +33,7 @@ class ContactOut(BaseModel):
     chat_jid: str
     display_name: Optional[str]
     phone: Optional[str]
-    status: str
+    status: ContactStatus
     status_reason: Optional[str]
 
     model_config = {"from_attributes": True}
@@ -45,8 +48,8 @@ class ConversationOut(BaseModel):
     id: int
     contact_id: int
     source: str
-    status: str
-    current_stage: Optional[str]
+    status: ConversationLifecycleStatus
+    current_stage: Optional[ConversationPipelineStage]
     matched_property_id: Optional[str]
     latest_message_text: Optional[str] = None
     latest_message_timestamp_ms: Optional[int] = None
@@ -219,6 +222,7 @@ class AppConfigOut(BaseModel):
 
 class AppConfigUpdate(BaseModel):
     values: dict[str, str]
+    model_config = ConfigDict(extra="forbid")
 
 
 class HealthOut(BaseModel):

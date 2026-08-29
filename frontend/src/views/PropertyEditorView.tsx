@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CheckCircle2, ChevronLeft, GripVertical, Save, Trash2, Upload } from "lucide-react";
-import type { PropertyInput, PropertyMedia, PropertyPlaybookInput, PropertyRecord } from "../api";
+import type { PropertyInput, PropertyMedia, PropertyPlaybookInput, PropertyRecord, RuntimeConfigValues } from "../api";
 import {
   EDITOR_SECTIONS,
   type EditorSection,
@@ -65,7 +65,7 @@ export function PropertyEditorView({
   playbookDraft: PropertyPlaybookInput;
   playbookDirty: boolean;
   setPlaybookDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  config: Record<string, string>;
+  config: RuntimeConfigValues;
   onBack: () => void;
   onSave: () => void;
   onDelete?: () => void;

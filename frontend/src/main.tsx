@@ -27,6 +27,8 @@ import {
   type PropertyMedia,
   type PropertyPlaybookInput,
   type PropertyRecord,
+  type RuntimeConfigKey,
+  type RuntimeConfigValues,
   type RuntimeStatus,
   type StageRun,
   type WhatsappConnection,
@@ -90,7 +92,7 @@ function App() {
   const [whatsappQr, setWhatsappQr] = useState<WhatsappQr | null>(null);
   const [whatsappBusy, setWhatsappBusy] = useState(false);
   const [whatsappError, setWhatsappError] = useState("");
-  const [config, setConfig] = useState<Record<string, string>>({});
+  const [config, setConfig] = useState<RuntimeConfigValues>({});
   const [status, setStatus] = useState("Loading");
   const [warnings, setWarnings] = useState<string[]>([]);
 
@@ -536,7 +538,7 @@ function App() {
     }
   }
 
-  async function toggleConfig(key: "pause_ai" | "send_lock") {
+  async function toggleConfig(key: RuntimeConfigKey) {
     const next = config[key] === "true" ? "false" : "true";
     const updated = await api.updateConfig({ [key]: next });
     setConfig(updated.values);
@@ -741,7 +743,7 @@ function TopBar({
 }: {
   activeView: AppView;
   runtimeStatus: RuntimeStatus | null;
-  config: Record<string, string>;
+  config: RuntimeConfigValues;
   status: string;
   currentUser: Me | null;
   onRefresh: () => void;

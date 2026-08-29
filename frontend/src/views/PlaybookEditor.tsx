@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronLeft, Clock, GripVertical, Image as ImageIcon, Phone, Plus, Send, Trash2 } from "lucide-react";
-import type { PlaybookBlock, PropertyPlaybookInput, PropertyRecord } from "../api";
+import type { PlaybookBlock, PropertyPlaybookInput, PropertyRecord, RuntimeConfigValues } from "../api";
 import type { AutoReplyField } from "../propertyEditorState";
 import {
   DEFAULT_AUTO_REPLY_SEQUENCES,
@@ -45,7 +45,7 @@ export function AutoRepliesEditor({
   draft: PropertyPlaybookInput;
   dirty: boolean;
   setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
-  config: Record<string, string>;
+  config: RuntimeConfigValues;
   disabled: boolean;
 }) {
   return (
@@ -262,7 +262,7 @@ function messageNumber(blocks: PlaybookBlock[], index: number): number {
   return blocks.slice(0, index + 1).filter((block) => block.type === "message").length;
 }
 
-function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecord | null; blocks: PlaybookBlock[]; config: Record<string, string> }) {
+function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecord | null; blocks: PlaybookBlock[]; config: RuntimeConfigValues }) {
   return (
     <div className="phoneShell">
       <div className="phoneHeader">
