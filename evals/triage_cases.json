@@ -1,0 +1,57 @@
+[
+  {
+    "id": "rental_availability",
+    "expected_is_initial_rental_enquiry": true,
+    "thread": "Hi, I am interested in renting Maple Grove Residence. Is this still available? Can view tomorrow?"
+  },
+  {
+    "id": "rental_listing_with_move_in",
+    "expected_is_initial_rental_enquiry": true,
+    "thread": "Hi, checking Harbour View Apartments. Budget 2800, can move in immediately. Still available?"
+  },
+  {
+    "id": "rental_agent_viewing",
+    "expected_is_initial_rental_enquiry": true,
+    "thread": "I am helping my tenant. Can we view Cedar Court this weekend?"
+  },
+  {
+    "id": "similar_rental_options",
+    "expected_is_initial_rental_enquiry": true,
+    "thread": "Do you have any two-bedroom rentals near the city around 3000?"
+  },
+  {
+    "id": "purchase_interest_not_rental",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "I am looking to buy a two-bedroom apartment near the city. Do you have any suitable units?"
+  },
+  {
+    "id": "asking_price_not_rental",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "Can you share the asking price for Oakline Towers? My client is interested."
+  },
+  {
+    "id": "owner_update_not_enquiry",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "Owner update: the landlord says viewing can happen after painting is completed next week."
+  },
+  {
+    "id": "existing_deal_contract_followup",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "The tenant signed the agreement already. Please send the deposit receipt."
+  },
+  {
+    "id": "viewing_reschedule_existing",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "Can we reschedule the viewing from 6pm to 7pm later? Same tenant as yesterday."
+  },
+  {
+    "id": "generic_acknowledgement",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "Okay, noted thanks."
+  },
+  {
+    "id": "personal_irrelevant",
+    "expected_is_initial_rental_enquiry": false,
+    "thread": "Dinner later? I might be late."
+  }
+]

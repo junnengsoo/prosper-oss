@@ -1,0 +1,103 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install backend dependencies
+        run: uv sync --locked --extra dev --python 3.11
+      - name: Test backend
+        run: .venv/bin/python -m pytest backend/tests
+      - name: Compile backend
+        run: .venv/bin/python -m compileall backend/app scripts
+      - name: Check shell scripts
+        run: |
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
+      - name: Check legacy surfaces
+        run: scripts/legacy_surface_check.py
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Audit frontend production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Test frontend
+        working-directory: frontend
+        run: npm run test
+
+  acceptance:
+    name: Full-stack browser acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install backend dependencies
+        run: uv sync --locked --extra dev --python 3.11
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run browser acceptance
+        run: INSTALL_DEPS=0 INSTALL_PLAYWRIGHT=0 scripts/acceptance.sh
+
+  bridge:
+    name: Bridge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+      - name: Install bridge dependencies
+        working-directory: bridge
+        run: npm ci
+      - name: Audit bridge production dependencies
+        working-directory: bridge
+        run: npm audit --omit=dev
+      - name: Typecheck bridge
+        working-directory: bridge
+        run: npm run typecheck
+      - name: Test bridge
+        working-directory: bridge
+        run: npm run test

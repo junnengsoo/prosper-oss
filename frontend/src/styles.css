@@ -1,0 +1,649 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #191c1d;
+  background: #f8f9fa;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --rail: 72px;
+  --border: #d9dcdd;
+  --border-soft: #eceeef;
+  --surface: #ffffff;
+  --surface-low: #f4f5f6;
+  --surface-mid: #edeeef;
+  --text: #121212;
+  --muted: #60666a;
+  --green: #25d366;
+  --green-dark: #006d2f;
+  --danger: #ba1a1a;
+  --danger-soft: #ffdad6;
+  --warning: #a66a00;
+  --warning-soft: #fff1cc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1180px;
+  height: 100vh;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.appFrame {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+
+.sideRail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  width: var(--rail);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.brandMark {
+  font-size: 22px;
+  font-weight: 900;
+  color: #000;
+  margin-bottom: 18px;
+}
+
+.sideRail nav {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.navItem,
+.accountRail {
+  position: relative;
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  background: transparent;
+  color: #4d5356;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.navItem.active {
+  background: var(--surface-mid);
+  color: #000;
+}
+
+.navItem.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #000;
+}
+
+.accountRail {
+  margin-top: auto;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
+.appContentFrame {
+  margin-left: var(--rail);
+  width: calc(100vw - var(--rail));
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topBar {
+  height: 64px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.topTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
+}
+
+.topTitle h1 {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.topTitle span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.statusPill {
+  border: 1px solid var(--border);
+  background: var(--surface-low);
+  color: #222;
+  border-radius: 999px;
+  padding: 7px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.statusPill.success {
+  background: #66f58d;
+  border-color: #66f58d;
+  color: #005322;
+}
+
+.statusPill.warning {
+  background: var(--warning-soft);
+  border-color: #f0d38a;
+  color: #704600;
+}
+
+.statusPill.danger {
+  background: var(--danger-soft);
+  border-color: #efb5ad;
+  color: #93000a;
+}
+
+.iconButton,
+.avatarButton {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logoutButton {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: #222;
+  border-radius: 8px;
+  padding: 0 10px 0 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logoutButton span {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--surface-mid);
+  display: inline-grid;
+  place-items: center;
+}
+
+.mutedIcon {
+  color: #4d5356;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(17, 24, 28, 0.36);
+}
+
+.connectionModal {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(10, 20, 28, 0.24);
+}
+
+.connectionModal header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.connectionModal h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.connectionState {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 24px;
+}
+
+.connectionState strong,
+.qrInstructions strong {
+  display: block;
+  font-size: 15px;
+}
+
+.connectionState span,
+.mutedLine {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.qrLayout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 22px;
+  padding: 24px;
+}
+
+.qrBox {
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-low);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.qrBox img {
+  width: min(100%, 280px);
+  aspect-ratio: 1;
+}
+
+.qrPlaceholder {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.qrPlaceholder strong {
+  color: var(--ink);
+}
+
+.qrInstructions {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.qrInstructions ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  line-height: 1.8;
+}
+
+.connectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.connectionActions button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.connectionActions .primaryButton {
+  border-color: #000;
+  background: #000;
+  color: #fff;
+}
+
+.connectionActions .primaryButton:disabled {
+  border-color: #000;
+  background: #000;
+  color: #fff;
+  opacity: 0.55;
+}
+
+.warningBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--warning-soft);
+  border-bottom: 1px solid #f0d38a;
+  color: #704600;
+  padding: 8px 18px;
+  font-size: 13px;
+}
+
+.warningBanner em {
+  margin-left: auto;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.loginScreen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #f8f9fa;
+}
+
+.loginCard {
+  width: min(420px, 92vw);
+  display: grid;
+  gap: 12px;
+  padding: 28px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.loginCard strong {
+  font-size: 24px;
+}
+
+.loginCard span,
+.formError {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.formError {
+  color: var(--danger);
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #000;
+  box-shadow: 0 0 0 1px #000;
+}
+
+.primaryButton {
+  border: 0;
+  background: #000;
+  color: #fff;
+  border-radius: 7px;
+  padding: 10px 16px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.primaryButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 9px 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.secondaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dangerButton {
+  border: 1px solid #ffc9c9;
+  background: #fff5f5;
+  color: #b42318;
+  border-radius: 7px;
+  padding: 10px 14px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dangerButton:hover {
+  border-color: #ff9f9f;
+  background: #ffecec;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: var(--surface-mid);
+  color: #4d5356;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.badge.success {
+  background: #66f58d;
+  color: #005322;
+}
+
+.badge.warning {
+  background: var(--warning-soft);
+  color: #8a5a00;
+}
+
+.badge.danger {
+  background: var(--danger-soft);
+  color: #93000a;
+}
+
+.badge.neutral {
+  background: var(--surface-mid);
+  color: #4d5356;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-mid);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0 12px;
+}
+
+.searchBox input {
+  border: 0;
+  background: transparent;
+  min-height: 38px;
+  min-width: 0;
+  width: 100%;
+  box-shadow: none;
+}
+
+.searchBox input:focus {
+  box-shadow: none;
+}
+
+.emptyState {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  padding: 36px 20px;
+}
+
+.emptyState strong {
+  color: var(--text);
+}
+
+@media (max-width: 1200px) {
+  body {
+    min-width: 980px;
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --rail: 60px;
+  }
+
+  body {
+    min-width: 0;
+  }
+
+  .sideRail {
+    gap: 10px;
+    padding: 12px 0;
+  }
+
+  .brandMark {
+    margin-bottom: 8px;
+  }
+
+  .navItem,
+  .accountRail {
+    min-height: 52px;
+    font-size: 10px;
+  }
+
+  .topBar {
+    height: auto;
+    min-height: 64px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .topTitle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .topTitle h1 {
+    font-size: 20px;
+  }
+
+  .topTitle span {
+    display: none;
+  }
+
+  .topActions {
+    width: 100%;
+    max-width: 100%;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .statusPill {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .appContentFrame,
+  .appFrame {
+    min-width: 0;
+  }
+
+  .connectionModal {
+    width: min(100%, calc(100vw - var(--rail) - 24px));
+  }
+
+  h1,
+  h2,
+  strong,
+  p,
+  span,
+  button,
+  input,
+  textarea {
+    overflow-wrap: anywhere;
+  }
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "property_id": "PROP-001",
+    "listing_status": "Available",
+    "project_name": "Harbour View Apartments",
+    "unit_number": "08-12",
+    "bedrooms": 2,
+    "bathrooms": 1,
+    "asking_rent": 2800,
+    "available_date": "Immediate",
+    "tenant_facing_caveats": "Viewing requires one day's notice.",
+    "propertyguru_listing_id": ""
+  },
+  {
+    "property_id": "PROP-002",
+    "listing_status": "Available",
+    "project_name": "Maple Grove Residence",
+    "unit_number": "03-04",
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "asking_rent": 3400,
+    "available_date": "Immediate",
+    "tenant_facing_caveats": "The owner prefers a one-year lease.",
+    "propertyguru_listing_id": ""
+  },
+  {
+    "property_id": "PROP-003",
+    "listing_status": "Available",
+    "project_name": "Cedar Court",
+    "unit_number": "12-01",
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "asking_rent": 2200,
+    "available_date": "2026-09-01",
+    "tenant_facing_caveats": "Available from September.",
+    "propertyguru_listing_id": ""
+  },
+  {
+    "property_id": "PROP-004",
+    "listing_status": "Offer pending",
+    "project_name": "Riverside Lofts",
+    "unit_number": "05-09",
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "asking_rent": 3100,
+    "available_date": "Immediate",
+    "tenant_facing_caveats": "Listing is currently pending an offer.",
+    "propertyguru_listing_id": ""
+  }
+]

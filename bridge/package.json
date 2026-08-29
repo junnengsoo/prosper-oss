@@ -1,0 +1,29 @@
+{
+  "name": "prosper-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "test": "tsx tests/config.test.ts && tsx tests/normalize.test.ts && tsx tests/backend.test.ts && tsx tests/sendServer.test.ts && tsx tests/sendHttpServer.test.ts && tsx tests/pairing.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@types/qrcode": "^1.5.6",
+    "@whiskeysockets/baileys": "^6.7.18",
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "link-preview-js": "4.0.1"
+  }
+}
