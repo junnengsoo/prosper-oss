@@ -19,7 +19,7 @@ from app.database.connection import Base, get_session
 from app.database.models import Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
-from app.schemas import BridgeInboundMessage, ConversationStageUpdate, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
+from app.schemas import BridgeInboundMessage, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
 from app.database.seed import seed_all
 import app.pipeline as pipeline_module
 from app.services import (
@@ -188,9 +188,7 @@ def test_legacy_bridge_token_remains_compatibility_alias(monkeypatch):
         get_settings.cache_clear()
 
 
-def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, session, monkeypatch):
-    import app.routers.conversations as conversations_router
-
+def test_valid_pipeline_sends_only_after_validated_matching(session):
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(
         session,
@@ -211,22 +209,14 @@ def test_api_valid_pipeline_sends_only_after_validated_matching(api_client, sess
             "reason": "single configured listing match",
         }
 
-    async def route_with_generator(session_arg, conversation_id):
-        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+    result = asyncio.run(pipeline_module.route_stored_conversation_after_inbound(session, conversation.id, generator))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, result))
 
-    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
-
-    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["result"]["send_result"]["status"] == "sent"
+    assert result["send_result"]["status"] == "sent"
     assert outbound_texts(session, conversation.id) == ["Hi 301C Punggol Central"]
 
 
-def test_api_malformed_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
-    import app.routers.conversations as conversations_router
-
+def test_malformed_matching_output_records_manual_review_without_outbound(session):
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(
         session,
@@ -239,26 +229,18 @@ def test_api_malformed_matching_output_records_manual_review_without_outbound(ap
     async def generator(messages):
         raise json.JSONDecodeError("bad json", "not json", 0)
 
-    async def route_with_generator(session_arg, conversation_id):
-        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+    result = asyncio.run(pipeline_module.route_stored_conversation_after_inbound(session, conversation.id, generator))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, result))
 
-    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
-
-    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["result"]["rental_listing_matching"]["match_status"] == "manual_review"
-    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert result["rental_listing_matching"]["match_status"] == "manual_review"
+    assert result["send_result"]["status"] == "manual_review"
     assert outbound_texts(session, conversation.id) == []
     session.refresh(conversation)
     assert conversation.current_stage == "manual_review"
     assert conversation.status == "active"
 
 
-def test_api_schema_invalid_matching_output_records_manual_review_without_outbound(api_client, session, monkeypatch):
-    import app.routers.conversations as conversations_router
-
+def test_schema_invalid_matching_output_records_manual_review_without_outbound(session):
     property_ = add_property(session, "RTF-001")
     upsert_property_playbook(
         session,
@@ -277,23 +259,15 @@ def test_api_schema_invalid_matching_output_records_manual_review_without_outbou
             "reason": "claims a match without a property",
         }
 
-    async def route_with_generator(session_arg, conversation_id):
-        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
+    result = asyncio.run(pipeline_module.route_stored_conversation_after_inbound(session, conversation.id, generator))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, result))
 
-    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
-
-    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["result"]["rental_listing_matching"]["match_status"] == "manual_review"
-    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert result["rental_listing_matching"]["match_status"] == "manual_review"
+    assert result["send_result"]["status"] == "manual_review"
     assert outbound_texts(session, conversation.id) == []
 
 
-def test_api_unavailable_matched_listing_records_manual_review_without_bridge_request(api_client, session, monkeypatch):
-    import app.routers.conversations as conversations_router
-
+def test_unavailable_matched_listing_records_manual_review_without_bridge_request(session, monkeypatch):
     property_ = add_property(session, "RTF-001", status="unavailable")
     upsert_property_playbook(
         session,
@@ -314,21 +288,16 @@ def test_api_unavailable_matched_listing_records_manual_review_without_bridge_re
             "reason": "single configured listing match",
         }
 
-    async def route_with_generator(session_arg, conversation_id):
-        return await pipeline_module.route_stored_conversation_after_inbound(session_arg, conversation_id, generator)
-
     async def fail_if_bridge_called(chat_jid: str, text: str, bridge_base_url: str | None = None) -> str:
         raise AssertionError("bridge delivery must not be attempted for unavailable listings")
 
-    monkeypatch.setattr(conversations_router, "route_stored_conversation_after_inbound", route_with_generator)
     monkeypatch.setattr("app.actions.send_via_bridge", fail_if_bridge_called)
 
-    response = api_client.post(f"/api/conversations/{conversation.id}/run-next")
+    result = asyncio.run(pipeline_module.route_stored_conversation_after_inbound(session, conversation.id, generator))
+    result = asyncio.run(execute_outbound_action_plan(session, conversation.id, result))
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["result"]["rental_listing_matching"]["match_status"] == "manual_review"
-    assert payload["result"]["send_result"]["status"] == "manual_review"
+    assert result["rental_listing_matching"]["match_status"] == "manual_review"
+    assert result["send_result"]["status"] == "manual_review"
     assert outbound_texts(session, conversation.id) == []
     session.refresh(conversation)
     assert conversation.matched_property_id == property_.property_id
@@ -572,13 +541,9 @@ def test_removed_extra_contract_shapes_are_rejected():
     with pytest.raises(ValueError):
         PlaybookBlock.model_validate({"type": "unsupported_block"})
 
-    with pytest.raises(ValueError):
-        ConversationStageUpdate.model_validate({"stage": "removed_stage"})
 
-
-def test_playbook_routes_get_put_validate_and_export(session):
+def test_playbook_routes_get_put_validate(session):
     from fastapi import HTTPException
-    from app.routers.config_runtime import export_config
     from app.routers.listings import get_property_playbook_route, put_property_playbook_route
 
     property_ = add_property(session, "RTF-001")
@@ -605,9 +570,6 @@ def test_playbook_routes_get_put_validate_and_export(session):
         )
     assert error.value.status_code == 400
     assert "unsupported placeholder" in error.value.detail
-
-    exported = export_config(session=session)
-    assert any(playbook.property_id == property_.property_id for playbook in exported.playbooks)
 
 
 def test_initial_reply_uses_property_playbook_override_and_gallery(session):

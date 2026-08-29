@@ -9,31 +9,17 @@ from ..auth import RequestContext
 from ..database.connection import get_session
 from ..database.models import Contact, Conversation, Message, StageRun
 from ..dependencies import DashboardContext
-from ..pipeline import (
-    route_stored_conversation_after_inbound,
-    run_initial_enquiry_pipeline,
-    run_rental_listing_matching,
-)
-from ..router_support import attach_outbound_action_result, build_pipeline_inspection
+from ..router_support import build_pipeline_inspection
 from ..schemas import (
     ContactOut,
     ContactStatusUpdate,
     ConversationOut,
-    ConversationStageUpdate,
     MessageOut,
-    PipelineRunResponse,
-    StartNewEnquiryRequest,
     StageRunOut,
 )
 from ..services import (
-    append_message,
-    cancel_contact,
-    close_conversation,
     ignore_contact,
-    now_ms,
     pause_contact,
-    resume_conversation_stage,
-    start_new_enquiry,
 )
 
 router = APIRouter()
@@ -65,21 +51,6 @@ def update_contact_status(
     else:
         contact.status = payload.status
         contact.status_reason = payload.status_reason or None
-    session.commit()
-    session.refresh(contact)
-    return contact
-
-
-@router.post("/api/contacts/{contact_id}/cancel", response_model=ContactOut)
-def cancel_contact_route(
-    contact_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> Contact:
-    contact = session.scalar(select(Contact).where(Contact.id == contact_id))
-    if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    cancel_contact(session, contact)
     session.commit()
     session.refresh(contact)
     return contact
@@ -134,125 +105,6 @@ def list_messages(
             .order_by(Message.timestamp_ms)
         ).all()
     )
-
-
-@router.post("/api/conversations/{conversation_id}/close", response_model=ConversationOut)
-def close_conversation_route(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> Conversation:
-    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    close_conversation(session, conversation)
-    session.commit()
-    session.refresh(conversation)
-    return conversation
-
-
-@router.post("/api/conversations/{conversation_id}/start-new-enquiry", response_model=ConversationOut)
-def start_new_enquiry_route(
-    conversation_id: int,
-    payload: StartNewEnquiryRequest,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> Conversation:
-    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        next_conversation = start_new_enquiry(session, conversation)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    if payload.latest_message_text.strip():
-        append_text = payload.latest_message_text.strip()
-        timestamp_ms = now_ms()
-        append_message(
-            session,
-            next_conversation,
-            conversation.contact.chat_jid,
-            f"manual-new-enquiry-{next_conversation.id}-{timestamp_ms}",
-            append_text,
-            timestamp_ms,
-            "inbound",
-            next_conversation.source,
-            conversation.contact.chat_jid,
-            "manual_new_enquiry_seed",
-        )
-    session.commit()
-    session.refresh(next_conversation)
-    return next_conversation
-
-
-@router.patch("/api/conversations/{conversation_id}/stage", response_model=ConversationOut)
-def update_conversation_stage_route(
-    conversation_id: int,
-    payload: ConversationStageUpdate,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> Conversation:
-    conversation = session.scalar(select(Conversation).where(Conversation.id == conversation_id))
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        resume_conversation_stage(session, conversation, payload.stage, payload.resume_contact)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    session.commit()
-    session.refresh(conversation)
-    return conversation
-
-
-@router.post("/api/conversations/{conversation_id}/run-initial-pipeline", response_model=PipelineRunResponse)
-async def run_initial_pipeline_route(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        result = await run_initial_enquiry_pipeline(session, conversation_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    result = await attach_outbound_action_result(session, result, conversation_id)
-    session.commit()
-    return PipelineRunResponse(conversation_id=conversation_id, result=result)
-
-
-@router.post("/api/conversations/{conversation_id}/run-next", response_model=PipelineRunResponse)
-async def run_next_pipeline_route(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        result = await route_stored_conversation_after_inbound(session, conversation_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    result = await attach_outbound_action_result(session, result, conversation_id)
-    session.commit()
-    return PipelineRunResponse(conversation_id=conversation_id, result=result)
-
-
-@router.post("/api/conversations/{conversation_id}/run-rental-listing-matching", response_model=PipelineRunResponse)
-async def run_rental_listing_matching_route(
-    conversation_id: int,
-    session: Session = Depends(get_session),
-    context: RequestContext = DashboardContext,
-) -> PipelineRunResponse:
-    if not session.scalar(select(Conversation).where(Conversation.id == conversation_id)):
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    try:
-        result = await run_rental_listing_matching(session, conversation_id)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    result = await attach_outbound_action_result(session, result, conversation_id)
-    session.commit()
-    return PipelineRunResponse(conversation_id=conversation_id, result=result)
 
 
 @router.get("/api/stage-runs", response_model=list[StageRunOut])

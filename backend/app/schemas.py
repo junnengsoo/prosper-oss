@@ -56,16 +56,6 @@ class ConversationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class StartNewEnquiryRequest(BaseModel):
-    latest_message_text: str = ""
-
-
-class ConversationStageUpdate(BaseModel):
-    stage: Literal["rental_listing_matching", "end"]
-    resume_contact: bool = True
-    model_config = {"extra": "forbid"}
-
-
 class TriageOutputContract(BaseModel):
     is_initial_rental_enquiry: bool
     confidence: Literal["high", "medium", "low"]
@@ -216,23 +206,6 @@ class PropertyPlaybookOut(PropertyPlaybookIn):
     model_config = {"from_attributes": True}
 
 
-class PropertyMediaExportOut(PropertyMediaIn):
-    id: int
-    property_id: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class PropertyExportOut(PropertyIn):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class FakeInboundMessage(BaseModel):
     chat_jid: str
     text: str
@@ -299,12 +272,3 @@ class StageRunOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-
-
-class ConfigExportOut(BaseModel):
-    exported_at: datetime
-    app: str
-    config: dict[str, str]
-    properties: list[PropertyExportOut]
-    property_media: list[PropertyMediaExportOut]
-    playbooks: list[PropertyPlaybookOut] = Field(default_factory=list)

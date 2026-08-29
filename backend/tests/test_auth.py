@@ -83,6 +83,14 @@ def test_single_user_cookie_auth_flow(session, monkeypatch):
         ("POST", "/demo/conversations/1/close"),
         ("POST", "/demo/contacts/1/unpause"),
         ("GET", "/api/playbooks"),
+        ("POST", "/api/contacts/1/cancel"),
+        ("GET", "/api/config/export"),
+        ("POST", "/api/conversations/1/close"),
+        ("POST", "/api/conversations/1/start-new-enquiry"),
+        ("PATCH", "/api/conversations/1/stage"),
+        ("POST", "/api/conversations/1/run-initial-pipeline"),
+        ("POST", "/api/conversations/1/run-next"),
+        ("POST", "/api/conversations/1/run-rental-listing-matching"),
     ],
 )
 def test_removed_operator_surfaces_are_not_routed(session, monkeypatch, method, path):
