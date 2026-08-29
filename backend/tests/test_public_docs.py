@@ -111,8 +111,14 @@ def test_tradeoff_inventory_is_present_before_final_briefing_concepts():
     )
 
 
-def test_readme_documents_manual_walkthrough_and_release_boundaries():
+def test_readme_documents_manual_smoke_test_and_release_boundaries():
     required_phrases = [
+        "## Manual Smoke Test",
+        "Setup:",
+        "Smoke Test:",
+        "Not covered by smoke test:",
+        "copy your local `.env` into that worktree",
+        "Run `scripts/test.sh` from the repository root",
         "Rental Listing",
         "Playbook / Auto Replies",
         "Simulator Conversation",

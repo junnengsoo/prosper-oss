@@ -115,18 +115,28 @@ AUTH_COOKIE_SECURE=true
 
 The frontend uses same-origin `/api/...` requests, so any reviewed deployment should serve the dashboard and backend API from the same HTTPS origin.
 
-## Manual Walkthrough
+## Manual Smoke Test
 
 The supported evaluation path is the Simulator Conversation. It uses the same backend pipeline as live inbound bridge messages while avoiding any WhatsApp account requirement.
 
-1. Open `http://127.0.0.1:5173` and select `Properties`.
-2. Create or edit a `Rental Listing`. Fill the listing name, status, listing URL, rent, availability date, bedrooms, bathrooms, and address. Save once the required fields are complete.
-3. Reopen the listing and select `Auto Replies`. Enable the Playbook / Auto Replies and set at least one tenant-facing reply for an available match. Save and return to the listing list.
-4. Select `Simulator`, start a new Simulator Conversation, and submit a tenant rental enquiry that mentions the configured Rental Listing.
-5. Confirm the simulator transcript shows the inbound message and, when `DEEPSEEK_API_KEY` is configured and the listing is available, the deterministic Playbook reply.
-6. Select `Inbox`, open the matched lead, and inspect `Prosper Audit`. Expand `Decision timeline` and confirm stage runs include `triage`, `rental_listing_matching`, and `outbound_actions`.
-7. Submit an enquiry for an unavailable or ambiguous listing. The expected behavior is manual review with no model-generated outbound reply.
-8. Optional: open the WhatsApp panel only after starting the authenticated WhatsApp Bridge. Confirm the bridge reports its connection state or pairing QR. Treat this as an experimental adapter check, not an official WhatsApp integration.
+Setup:
+
+1. From the repository root, copy the environment template with `cp .env.example .env`.
+2. If reviewing from a separate worktree and model-backed testing is desired, copy your local `.env` into that worktree and fill placeholders such as `DEEPSEEK_API_KEY=replace-with-your-key`. Never commit real secret values.
+3. Install locked dependencies with `uv sync --locked --extra dev --python 3.11`, `cd frontend && npm ci`, and `cd ../bridge && npm ci`.
+4. Return to the repository root, initialize local data with `.venv/bin/python -m app.cli init-db`, then start services with `scripts/dev.sh`.
+5. Open the dashboard at `http://127.0.0.1:5173`.
+
+Smoke Test:
+
+1. Select `Properties`, then create or edit a `Rental Listing`. Fill the listing name, status, listing URL, rent, availability date, bedrooms, bathrooms, and address. Saving should return without validation errors.
+2. Reopen the listing and select `Auto Replies`. Enable the Playbook / Auto Replies and set at least one tenant-facing reply for an available match. Saving should preserve the enabled state and reply text.
+3. Select `Simulator`, start a new Simulator Conversation, and submit a tenant rental enquiry that mentions the configured Rental Listing. The transcript should show the inbound message and, when `DEEPSEEK_API_KEY` is configured and the listing is available, the deterministic Playbook reply.
+4. Select `Inbox`, open the matched lead, and inspect `Prosper Audit`. Expanding `Decision timeline` should show stage runs for `triage`, `rental_listing_matching`, and `outbound_actions`.
+5. Submit an enquiry for an unavailable or ambiguous listing. The expected behavior is manual review with no model-generated outbound reply.
+6. Optional: open the WhatsApp panel only after starting the authenticated WhatsApp Bridge. The bridge should report its connection state or pairing QR. Treat this as an experimental adapter check, not an official WhatsApp integration.
+
+Not covered by smoke test: aggregate `scripts/test.sh`, backend tests, frontend tests, desktop and mobile browser acceptance, bridge typechecking/tests, removed-surface regression checks, and clean locked installs are automated verification responsibilities. Run `scripts/test.sh` from the repository root to exercise them together instead of duplicating those low-level checks manually.
 
 For the optional authenticated WhatsApp Bridge, keep the backend and bridge on loopback during local review or configure a private token:
 
