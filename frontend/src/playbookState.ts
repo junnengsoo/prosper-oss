@@ -18,13 +18,6 @@ export const DEFAULT_AUTO_REPLY_SEQUENCES: Record<AutoReplyField, PlaybookBlock[
   ],
 };
 
-const LEGACY_AUTO_REPLY_DEFAULTS: Record<AutoReplyField, string[]> = {
-  availableInitial: [
-    "Hi, thanks for enquiring about {unit_info}. I'm the listing agent.",
-    "Hi there! Thank you for inquiring about {unit_info}. I'm the listing agent.",
-  ],
-};
-
 const STOCK_GALLERY_CAPTIONS = new Set([
   "Here are some photos of the unit.",
 ]);
@@ -70,11 +63,6 @@ export function effectiveAutoReplyInput(playbook: PropertyPlaybook | null | unde
   };
 }
 
-function normalizeAutoReplyDefault(field: AutoReplyField, value: string): string {
-  const normalized = value.trim();
-  return LEGACY_AUTO_REPLY_DEFAULTS[field].some((legacy) => legacy.trim() === normalized) ? DEFAULT_AUTO_REPLIES[field] : value;
-}
-
 export function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReplyField): PlaybookBlock[] {
   const editableBlocks = blocks.filter((block) => {
     if (block.type === "delay") return true;
@@ -84,17 +72,9 @@ export function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReply
   return editableBlocks.length > 0 ? editableBlocks : DEFAULT_AUTO_REPLY_SEQUENCES[field];
 }
 
-function normalizeAutoReplyBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
-  return compactAutoReplyBlocks(blocks, field).map((block) => (
-    block.type === "message"
-      ? { ...block, text: normalizeAutoReplyDefault(field, block.text ?? "") }
-      : block
-  ));
-}
-
 export function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
   return [
-    ...normalizeAutoReplyBlocks(field, blocks),
+    ...compactAutoReplyBlocks(blocks, field),
     { type: "gallery", mode: "enabled_property_gallery" },
   ];
 }

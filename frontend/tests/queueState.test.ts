@@ -120,10 +120,10 @@ function conversation(overrides: Partial<Conversation>): Conversation {
 }
 
 assert(rows.length === 2, "buildInboxRows should include matched WhatsApp and Manual Review conversations");
-assert(filterInboxRows(rows, "all", "", properties).length === 2, "all filter should show matched WhatsApp and Manual Review conversations");
-assert(filterInboxRows(rows, "all", "rivervale", properties).length === 1, "search should match property name/address");
-assert(filterInboxRows(rows, "all", "weekend", properties).length === 1, "search should match latest message text");
-assert(filterInboxRows(rows, "all", "no-such-query", properties).length === 0, "search should exclude non-matching rows");
+assert(filterInboxRows(rows, "", properties).length === 2, "empty search should show matched WhatsApp and Manual Review conversations");
+assert(filterInboxRows(rows, "rivervale", properties).length === 1, "search should match property name/address");
+assert(filterInboxRows(rows, "weekend", properties).length === 1, "search should match latest message text");
+assert(filterInboxRows(rows, "no-such-query", properties).length === 0, "search should exclude non-matching rows");
 
 assert(queueActionForConversation(conversation({ current_stage: "end" })).label === "Listing matched", "stage should not drive the simplified inbox label");
 assert(queueActionForConversation(conversation({ current_stage: "rental_listing_matching" })).label === "Listing matched", "active AI stages should not be exposed in the simplified inbox");
