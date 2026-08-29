@@ -73,20 +73,20 @@ def list_conversations(
             .where(Message.conversation_id == conversation.id)
             .order_by(Message.timestamp_ms.desc(), Message.id.desc())
         )
-        rows.append(
-            ConversationOut(
-                id=conversation.id,
-                contact_id=conversation.contact_id,
-                source=conversation.source,
-                status=conversation.status,
-                current_stage=conversation.current_stage,
-                matched_property_id=conversation.matched_property_id,
-                latest_message_text=latest_message.text if latest_message else None,
-                latest_message_timestamp_ms=latest_message.timestamp_ms if latest_message else None,
-                latest_message_direction=latest_message.direction if latest_message else None,
-            )
+        row = ConversationOut(
+            id=conversation.id,
+            contact_id=conversation.contact_id,
+            source=conversation.source,
+            status=conversation.status,
+            current_stage=conversation.current_stage,
+            matched_property_id=conversation.matched_property_id,
+            latest_message_text=latest_message.text if latest_message else None,
+            latest_message_timestamp_ms=latest_message.timestamp_ms if latest_message else None,
+            latest_message_direction=latest_message.direction if latest_message else None,
         )
-    return rows
+        rows.append((latest_message.timestamp_ms if latest_message else None, conversation.updated_at, conversation.id, row))
+    rows.sort(key=lambda item: (item[0] is not None, item[0] or 0, item[1], item[2]), reverse=True)
+    return [row for *_sort_keys, row in rows]
 
 
 @router.get("/api/conversations/{conversation_id}/messages", response_model=list[MessageOut])

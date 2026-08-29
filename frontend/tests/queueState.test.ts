@@ -11,9 +11,9 @@ function assert(condition: unknown, message: string) {
 }
 
 const contacts: Contact[] = [
-  { id: 1, chat_jid: "tenant-1@s.whatsapp.net", display_name: "Demo Tenant", phone: "555-0101", status: "active", status_reason: null, last_message_at: null },
-  { id: 2, chat_jid: "tenant-2@s.whatsapp.net", display_name: "Second Tenant", phone: "555-0102", status: "active", status_reason: null, last_message_at: null },
-  { id: 3, chat_jid: "tenant-3@s.whatsapp.net", display_name: "Paused Contact", phone: "555-0103", status: "paused", status_reason: "manual_takeover", last_message_at: null },
+  { id: 1, chat_jid: "tenant-1@s.whatsapp.net", display_name: "Demo Tenant", phone: "555-0101", status: "active", status_reason: null },
+  { id: 2, chat_jid: "tenant-2@s.whatsapp.net", display_name: "Second Tenant", phone: "555-0102", status: "active", status_reason: null },
+  { id: 3, chat_jid: "tenant-3@s.whatsapp.net", display_name: "Paused Contact", phone: "555-0103", status: "paused", status_reason: "manual_takeover" },
 ];
 
 const conversations: Conversation[] = [

@@ -19,7 +19,6 @@ from ..services import (
     handle_fake_inbound,
     is_ai_paused,
     reset_fake_chat_data,
-    timestamp_to_datetime,
 )
 
 router = APIRouter()
@@ -38,11 +37,9 @@ def fake_inbound(
         else None
     )
     if existing_contact and existing_contact.status == "ignored":
-        existing_contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms or 0) if payload.timestamp_ms else existing_contact.last_message_at
         session.commit()
         raise HTTPException(status_code=409, detail="Contact is ignored")
     if existing_contact and existing_contact.status == "paused" and not existing_conversation:
-        existing_contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms or 0) if payload.timestamp_ms else existing_contact.last_message_at
         session.commit()
         raise HTTPException(status_code=409, detail="Contact is paused and has no active conversation")
     message = handle_fake_inbound(session, payload)
@@ -64,7 +61,6 @@ async def fake_inbound_and_run(
         else None
     )
     if existing_contact and existing_contact.status == "ignored":
-        existing_contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms or 0) if payload.timestamp_ms else existing_contact.last_message_at
         session.commit()
         return PipelineRunResponse(conversation_id=None, result={"stage_status": "skipped", "reason": "contact_ignored"})
 
@@ -76,7 +72,6 @@ async def fake_inbound_and_run(
                 conversation_id=message.conversation_id,
                 result={"stage_status": "skipped", "reason": "contact_paused"},
             )
-        existing_contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms or 0) if payload.timestamp_ms else existing_contact.last_message_at
         session.commit()
         return PipelineRunResponse(conversation_id=None, result={"stage_status": "skipped", "reason": "contact_paused"})
 
@@ -84,7 +79,6 @@ async def fake_inbound_and_run(
         triage = await run_triage_text(session, payload.text, conversation_id=None, persist_input_snapshot=False)
         if not triage_is_initial_enquiry(triage) and triage.get("stage_status") != "manual_review":
             contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
-            contact.last_message_at = timestamp_to_datetime(payload.timestamp_ms or 0) if payload.timestamp_ms else contact.last_message_at
             session.commit()
             return PipelineRunResponse(conversation_id=None, result={"triage": triage})
 

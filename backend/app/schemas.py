@@ -32,7 +32,6 @@ class ContactOut(BaseModel):
     phone: Optional[str]
     status: str
     status_reason: Optional[str]
-    last_message_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
 

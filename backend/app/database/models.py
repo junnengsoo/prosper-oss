@@ -27,7 +27,6 @@ class Contact(TimestampMixin, Base):
     phone: Mapped[Optional[str]] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)
     status_reason: Mapped[Optional[str]] = mapped_column(Text)
-    last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="contact")
 
@@ -49,8 +48,6 @@ class Conversation(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)
     current_stage: Mapped[Optional[str]] = mapped_column(String)
     matched_property_id: Mapped[Optional[str]] = mapped_column(String)
-    latest_inbound_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    latest_outbound_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     contact: Mapped[Contact] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
