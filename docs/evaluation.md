@@ -13,7 +13,7 @@ Prosper separates deterministic correctness checks from model-quality checks. Th
 
 ## Scenario Checks
 
-`frontend/src/fakeChatScenarios.ts` and `scripts/fake_chat_smoke.py` provide repeatable enquiry scenarios for available, ambiguous, unavailable, purchase, and non-enquiry messages.
+`scripts/fake_chat_smoke.py` provides repeatable enquiry scenarios for available, ambiguous, unavailable, purchase, and non-enquiry messages.
 
 The browser acceptance suite covers the public manual flow on desktop and mobile: create Rental Listings, configure Playbook / Auto Replies, submit Simulator Conversation messages, inspect audit stage runs, and verify manual-review behavior for unavailable matches.
 

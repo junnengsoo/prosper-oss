@@ -1,4 +1,4 @@
-import { Building2, MessageSquare, Phone, Search } from "lucide-react";
+import { Building2, Search } from "lucide-react";
 import type { Contact, Conversation, Message, PropertyRecord, StageRun } from "../api";
 import { buildInboxRows, queueActionForConversation } from "../queueState";
 import {
@@ -53,12 +53,6 @@ export function InboxView({
           <Search size={18} />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for leads" />
         </div>
-        <div className="filterChips">
-          <button className="active">All Today</button>
-          <button>Unread</button>
-          <button>Interested</button>
-          <button>Matched</button>
-        </div>
         <div className="leadList">
           {rows.length === 0 && <EmptyState title="No matched enquiries" body="Matched WhatsApp enquiries will appear here after rental listing matching." />}
           {rows.map((row) => {
@@ -96,10 +90,6 @@ export function InboxView({
               <div>
                 <h2>{selectedContact?.display_name || selectedContact?.phone || selectedContact?.chat_jid}</h2>
                 <span>Last active {formatTime(selectedConversation.latest_message_timestamp_ms)} · Singapore</span>
-              </div>
-              <div className="leadActions">
-                <button><Phone size={16} /> Call</button>
-                <button className="primaryButton"><MessageSquare size={16} /> WhatsApp Agent</button>
               </div>
             </div>
             <div className="leadSummaryGrid">

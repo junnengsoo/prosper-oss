@@ -32,13 +32,11 @@ import {
   type WhatsappConnection,
   type WhatsappQr,
 } from "./api";
-import { buildInboxRows, filterInboxRows, type QueueFilter } from "./queueState";
+import { buildInboxRows, filterInboxRows } from "./queueState";
 import {
-  APP_VIEW_STORAGE_KEY,
   appViewHash,
   type AppView,
   normalizeHashView,
-  readStoredAppView,
 } from "./viewState";
 import { InboxView } from "./views/InboxView";
 import { PropertiesView } from "./views/PropertiesView";
@@ -69,7 +67,7 @@ import "./styles.css";
 
 function getInitialView(): AppView {
   if (typeof window === "undefined") return "inbox";
-  return normalizeHashView(window.location.hash) ?? readStoredAppView(window.localStorage) ?? "inbox";
+  return normalizeHashView(window.location.hash) ?? "inbox";
 }
 
 function App() {
@@ -98,7 +96,6 @@ function App() {
 
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [inboxSearch, setInboxSearch] = useState("");
-  const [queueFilter] = useState<QueueFilter>("all");
 
   const [propertySearch, setPropertySearch] = useState("");
   const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
@@ -151,7 +148,6 @@ function App() {
   }, [applySession]);
 
   useEffect(() => {
-    window.localStorage.setItem(APP_VIEW_STORAGE_KEY, activeView);
     const nextHash = `#${appViewHash(activeView)}`;
     if (window.location.hash !== nextHash) window.history.replaceState(null, "", nextHash);
     window.scrollTo({ top: 0, left: 0 });
@@ -254,7 +250,7 @@ function App() {
   }, [editingPropertyId, loadAll]);
 
   const inboxRows = useMemo(() => buildInboxRows(contacts, conversations), [contacts, conversations]);
-  const filteredInboxRows = useMemo(() => filterInboxRows(inboxRows, queueFilter, inboxSearch, properties), [inboxRows, inboxSearch, properties, queueFilter]);
+  const filteredInboxRows = useMemo(() => filterInboxRows(inboxRows, inboxSearch, properties), [inboxRows, inboxSearch, properties]);
 
   useEffect(() => {
     if (!selectedConversationId && filteredInboxRows[0]) setSelectedConversationId(filteredInboxRows[0].conversation.id);

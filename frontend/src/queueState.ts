@@ -1,7 +1,5 @@
 import type { Contact, Conversation, PropertyRecord } from "./api";
 
-export type QueueFilter = "all";
-
 export type QueueActionTone = "neutral" | "success" | "warning" | "danger";
 
 export type QueueAction = {
@@ -23,10 +21,6 @@ export function buildInboxRows(contacts: Contact[], conversations: Conversation[
       const contact = contacts.find((item) => item.id === conversation.contact_id);
       return { kind: "conversation", conversation, contact };
     });
-}
-
-export function matchesQueueFilter(row: InboxRow, queueFilter: QueueFilter): boolean {
-  return queueFilter === "all";
 }
 
 export function matchesQueueSearch(row: InboxRow, queryText: string, properties: PropertyRecord[]): boolean {
@@ -53,8 +47,8 @@ export function matchesQueueSearch(row: InboxRow, queryText: string, properties:
     .some((value) => String(value).toLowerCase().includes(query));
 }
 
-export function filterInboxRows(rows: InboxRow[], queueFilter: QueueFilter, queryText: string, properties: PropertyRecord[]): InboxRow[] {
-  return rows.filter((row) => matchesQueueFilter(row, queueFilter) && matchesQueueSearch(row, queryText, properties));
+export function filterInboxRows(rows: InboxRow[], queryText: string, properties: PropertyRecord[]): InboxRow[] {
+  return rows.filter((row) => matchesQueueSearch(row, queryText, properties));
 }
 
 export function queueActionForConversation(conversation: Conversation, contact?: Contact | null): QueueAction {

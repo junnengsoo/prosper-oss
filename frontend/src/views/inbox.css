@@ -17,16 +17,6 @@
   margin: 14px 16px;
 }
 
-.filterChips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 0 16px 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.filterChips button,
-.leadActions button,
 .matchedPropertyCard button {
   border: 1px solid var(--border);
   background: #fff;
@@ -38,12 +28,6 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-}
-
-.filterChips button.active {
-  background: #000;
-  color: #fff;
-  border-color: #000;
 }
 
 .leadList {
@@ -134,12 +118,6 @@
   font-size: 13px;
 }
 
-.leadActions {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
-}
-
 .leadSummaryGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
@@ -220,10 +198,6 @@
     margin: 10px 12px;
   }
 
-  .filterChips {
-    padding: 0 12px 10px;
-  }
-
   .leadDetailPane {
     padding: 16px 14px 40px;
   }
@@ -231,16 +205,6 @@
   .leadHeader {
     flex-wrap: wrap;
     align-items: flex-start;
-  }
-
-  .leadActions {
-    width: 100%;
-    margin-left: 0;
-    flex-wrap: wrap;
-  }
-
-  .leadActions button {
-    flex: 1 1 130px;
   }
 
   .leadSummaryGrid {

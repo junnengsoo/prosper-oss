@@ -29,12 +29,12 @@ const legacyPlaybook: PropertyPlaybook = {
   updated_at: "",
 };
 
-const normalized = effectiveAutoReplyInput(legacyPlaybook);
-assert(normalized.enabled, "effective playbook should preserve enabled state");
-assert(normalized.initial_reply_blocks[0].type === "message", "first block should remain a message");
-assert(normalized.initial_reply_blocks[0].text === "Hi, yes this unit is still available.", "legacy greeting should normalize to the current default");
-assert(!normalized.initial_reply_blocks.some((block) => block.type === "message" && block.text === "Here are some photos of the unit."), "stock gallery caption should not be editable");
-assert(normalized.initial_reply_blocks.at(-1)?.type === "gallery", "effective playbook should retain gallery ordering");
+const effective = effectiveAutoReplyInput(legacyPlaybook);
+assert(effective.enabled, "effective playbook should preserve enabled state");
+assert(effective.initial_reply_blocks[0].type === "message", "first block should remain a message");
+assert(effective.initial_reply_blocks[0].text === "Hi, thanks for enquiring about {unit_info}. I'm the listing agent.", "existing playbook text should not be rewritten");
+assert(!effective.initial_reply_blocks.some((block) => block.type === "message" && block.text === "Here are some photos of the unit."), "stock gallery caption should not be editable");
+assert(effective.initial_reply_blocks.at(-1)?.type === "gallery", "effective playbook should retain gallery ordering");
 
 const editedBlocks: PlaybookBlock[] = [
   { type: "message", text: "First {unit_info}" },
