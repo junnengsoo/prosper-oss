@@ -115,7 +115,7 @@ AUTH_COOKIE_SECURE=true
 
 The frontend uses same-origin `/api/...` requests, so any reviewed deployment should serve the dashboard and backend API from the same HTTPS origin.
 
-## Manual Smoke Test
+## Manual Walkthrough
 
 The supported evaluation path is the Simulator Conversation. It uses the same backend pipeline as live inbound bridge messages while avoiding any WhatsApp account requirement.
 
