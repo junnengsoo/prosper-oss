@@ -1,5 +1,5 @@
 import { Image as ImageIcon } from "lucide-react";
-import { apiUrl, type Message, type PropertyMedia, type PropertyRecord, type StageRun } from "./api";
+import { apiUrl, type Message, type PropertyMedia, type PropertyRecord, type RuntimeConfigValues, type StageRun } from "./api";
 import "./messageHistory.css";
 
 export function classNames(...parts: Array<string | false | null | undefined>): string {
@@ -126,7 +126,7 @@ export function EmptyState({ title, body }: { title: string; body: string }) {
   return <div className="emptyState"><strong>{title}</strong><span>{body}</span></div>;
 }
 
-export function replacePlaceholders(text: string, property: PropertyRecord | null | undefined, config: Record<string, string>): string {
+export function replacePlaceholders(text: string, property: PropertyRecord | null | undefined, config: RuntimeConfigValues): string {
   const unitInfo = property
     ? `${property.property_name}${property.asking_rent ? `, ${formatMoney(property.asking_rent)}` : ""}${property.available_from ? `, available ${property.available_from}` : ""}`
     : "this unit";

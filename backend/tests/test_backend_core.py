@@ -16,7 +16,7 @@ from app.actions import execute_outbound_action_plan, plan_outbound_actions
 from app.auth import CurrentUser, RequestContext, current_user_from_session
 from app.config import get_settings
 from app.database.connection import Base, get_session
-from app.database.models import Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
+from app.database.models import AppConfig, Contact, Conversation, Message, Property, PropertyMedia, PropertyPlaybook, StageRun
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
 from app.schemas import BridgeInboundMessage, ContactOut, ConversationOut, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
@@ -157,6 +157,29 @@ def test_message_timestamp_caches_are_removed_from_models_and_public_contracts()
     assert "last_message_at" not in ContactOut.model_fields
     assert "latest_inbound_at" not in ConversationOut.model_fields
     assert "latest_outbound_at" not in ConversationOut.model_fields
+
+
+def test_conversation_public_contract_validates_lifecycle_status_and_routing_stage():
+    base = {
+        "id": 1,
+        "contact_id": 1,
+        "source": "whatsapp",
+        "status": "active",
+        "current_stage": "rental_listing_matching",
+        "matched_property_id": None,
+    }
+
+    assert ConversationOut.model_validate(base).status == "active"
+    assert ConversationOut.model_validate({**base, "status": "closed", "current_stage": "end"}).current_stage == "end"
+    assert ConversationOut.model_validate({**base, "current_stage": "manual_review"}).current_stage == "manual_review"
+
+    for unsupported_status in ["open", "paused", "handover"]:
+        with pytest.raises(ValueError):
+            ConversationOut.model_validate({**base, "status": unsupported_status})
+
+    for unsupported_stage in ["triage", "paused", "handover"]:
+        with pytest.raises(ValueError):
+            ConversationOut.model_validate({**base, "current_stage": unsupported_stage})
 
 
 def test_conversation_list_derives_latest_message_display_from_messages(api_client, session):
@@ -313,6 +336,20 @@ def test_public_health_and_runtime_status_identify_prosper(api_client, monkeypat
     assert runtime.status_code == 200
     assert runtime.json()["app"] == "prosper"
     assert runtime.json()["bridge"]["bridge"] == "prosper-bridge"
+
+
+def test_runtime_config_rejects_unsupported_keys_and_accepts_operator_toggles(api_client, session):
+    response = api_client.patch("/api/config", json={"values": {"unsupported_toggle": "true"}})
+
+    assert response.status_code == 400
+    assert "Unsupported config key" in response.json()["detail"]
+    assert session.scalar(select(AppConfig).where(AppConfig.key == "unsupported_toggle")) is None
+
+    response = api_client.patch("/api/config", json={"values": {"send_lock": "true", "pause_ai": "false"}})
+
+    assert response.status_code == 200
+    assert response.json()["values"]["send_lock"] == "true"
+    assert response.json()["values"]["pause_ai"] == "false"
 
 
 def test_prosper_bridge_token_configures_backend_bridge_auth(monkeypatch):
