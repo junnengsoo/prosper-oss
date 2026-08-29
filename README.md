@@ -24,6 +24,8 @@ DeepSeek is the sole explicit model provider in this reference. The application 
 ## Documentation Map
 
 - [Architecture](docs/architecture.md) describes the backend pipeline, dashboard, and optional bridge boundary.
+- [Project Briefing](docs/project-presentation.md) gives reviewers a concise guide to architecture, workflow, safety decisions, tradeoffs, setup, and inspection points.
+- [Tradeoff Inventory](docs/tradeoff-inventory.md) records what Prosper intentionally keeps, removes, and defers.
 - [Reliability Notes](docs/reliability.md) documents duplicate handling, state gates, model failures, outbound delivery, and local retention.
 - [Evaluation Strategy](docs/evaluation.md) separates deterministic checks from live model-quality checks.
 - [Domain Glossary](docs/domain-glossary.md) defines Rental Listing, Playbook, Simulator Conversation, Stage Run, and related terms used in the code and UI.
