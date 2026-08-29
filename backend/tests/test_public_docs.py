@@ -3,10 +3,17 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 README = (ROOT_DIR / "README.md").read_text()
+PROJECT_BRIEFING = (ROOT_DIR / "docs" / "project-presentation.md").read_text()
+TRADEOFF_INVENTORY = (ROOT_DIR / "docs" / "tradeoff-inventory.md").read_text()
 PUBLIC_DOCS = [
     ROOT_DIR / "README.md",
     *sorted((ROOT_DIR / "docs").glob("**/*.md")),
 ]
+
+
+def assert_contains_all(text: str, phrases: list[str]):
+    for phrase in phrases:
+        assert phrase in text
 
 
 def test_readme_uses_public_reference_positioning_without_release_overclaiming():
@@ -66,6 +73,44 @@ def test_public_docs_avoid_old_product_and_review_positioning_language():
             assert phrase not in text, f"{path.relative_to(ROOT_DIR)} contains {phrase!r}"
 
 
+def test_reviewer_briefing_covers_review_surface_without_brittle_positioning():
+    required_phrases = [
+        "architecture",
+        "workflow",
+        "safety decisions",
+        "tradeoffs",
+        "setup",
+        "what to inspect",
+        "Pipeline",
+        "Stage Runs",
+        "Playbook / Auto Replies",
+        "Simulator Conversation",
+        "reset-only SQLite",
+        "Manual Review",
+        "optional authenticated WhatsApp Bridge",
+        "scripts/test.sh",
+    ]
+
+    assert_contains_all(PROJECT_BRIEFING.lower(), [phrase.lower() for phrase in required_phrases])
+
+    assert "docs/tradeoff-inventory.md" not in PROJECT_BRIEFING
+    assert "[Tradeoff Inventory](tradeoff-inventory.md)" in PROJECT_BRIEFING
+
+
+def test_tradeoff_inventory_is_present_before_final_briefing_concepts():
+    assert_contains_all(TRADEOFF_INVENTORY, ["## Kept", "## Removed", "## Deferred", "## Why"])
+
+    assert_contains_all(
+        TRADEOFF_INVENTORY,
+        [
+            "Stage Runs as the audit story",
+            "Optional authenticated WhatsApp Bridge",
+            "Managed operations",
+            "Broader product scope",
+        ],
+    )
+
+
 def test_readme_documents_manual_walkthrough_and_release_boundaries():
     required_phrases = [
         "Rental Listing",
@@ -76,10 +121,11 @@ def test_readme_documents_manual_walkthrough_and_release_boundaries():
         "reset-only SQLite",
         "best-effort outbound delivery",
         "inbound deduplication",
+        "docs/project-presentation.md",
+        "docs/tradeoff-inventory.md",
         "docs/domain-glossary.md",
         "docs/adr/0001-public-reference-boundaries.md",
         "history squash",
     ]
 
-    for phrase in required_phrases:
-        assert phrase in README
+    assert_contains_all(README, required_phrases)
