@@ -1,2 +1,1 @@
-"""WhatsApp PA backend package."""
-
+"""Prosper backend package."""

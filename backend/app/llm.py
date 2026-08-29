@@ -111,7 +111,7 @@ async def generate_json(
     context = context or {}
     stage = str(context.get("stage") or "llm")
     metadata = {
-        "feature": "whatsapp_pa",
+        "feature": "prosper",
         "stage": stage,
         **(context.get("metadata") or {}),
     }
@@ -179,12 +179,12 @@ async def generate_json(
             result, _ = await call_provider()
             return result
 
-        tags = ["whatsapp-pa", stage]
+        tags = ["prosper", stage]
         session_id = str(conversation_id) if conversation_id is not None else None
         with propagate_attributes(session_id=session_id, tags=tags, metadata=metadata):
             with langfuse.start_as_current_observation(
                 as_type="generation",
-                name=f"whatsapp-pa-{stage}",
+                name=f"prosper-{stage}",
                 model=settings.deepseek_model,
             ) as generation:
                 generation.update(

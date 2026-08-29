@@ -124,7 +124,8 @@ def test_removed_operator_surfaces_are_not_routed(session, monkeypatch, method, 
     ],
 )
 def test_bridge_callback_routes_require_configured_bridge_token(session, monkeypatch, path, method, body):
-    monkeypatch.setenv("WHATSAPP_PA_BRIDGE_TOKEN", "backend-secret")
+    monkeypatch.setenv("PROSPER_BRIDGE_TOKEN", "backend-secret")
+    monkeypatch.delenv("WHATSAPP_PA_BRIDGE_TOKEN", raising=False)
     get_settings.cache_clear()
 
     def override_session():

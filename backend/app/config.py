@@ -2,6 +2,7 @@ from functools import lru_cache
 import os
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +11,7 @@ RUNTIME_DIR = ROOT_DIR / "runtime"
 
 
 def settings_env_files() -> tuple[Path, ...]:
-    explicit_env_file = os.environ.get("WHATSAPP_PA_ENV_FILE", ".env")
+    explicit_env_file = os.environ.get("PROSPER_ENV_FILE") or os.environ.get("WHATSAPP_PA_ENV_FILE", ".env")
     paths: list[Path] = []
     prod = ROOT_DIR / ".env.prod"
     if explicit_env_file != ".env.prod":
@@ -33,8 +34,14 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = ""
     langfuse_host: str = ""
-    bridge_base_url: str = "http://127.0.0.1:8788"
-    whatsapp_pa_bridge_token: str = ""
+    bridge_base_url: str = Field(
+        default="http://127.0.0.1:8788",
+        validation_alias=AliasChoices("PROSPER_BRIDGE_BASE_URL", "BRIDGE_BASE_URL"),
+    )
+    bridge_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("PROSPER_BRIDGE_TOKEN", "WHATSAPP_PA_BRIDGE_TOKEN"),
+    )
     auth_required: bool = False
     access_password: str = ""
     session_secret: str = ""

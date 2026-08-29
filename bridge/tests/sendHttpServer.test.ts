@@ -68,6 +68,7 @@ function options(overrides: Partial<BridgeHttpServerOptions> = {}): BridgeHttpSe
     const health = await request(baseUrl, "/health");
     assert.equal(health.status, 200);
     assert.equal(health.body.ok, true);
+    assert.equal(health.body.bridge, "prosper-bridge");
 
     for (const path of ["/status", "/pairing/qr"]) {
       assert.equal((await request(baseUrl, path)).status, 401);

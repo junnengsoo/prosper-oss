@@ -46,7 +46,7 @@ def timestamp_to_datetime(timestamp_ms: int | None) -> datetime | None:
 
 
 def bridge_auth_headers() -> dict[str, str]:
-    token = get_settings().whatsapp_pa_bridge_token.strip()
+    token = get_settings().bridge_token.strip()
     return {"x-whatsapp-bridge-token": token} if token else {}
 
 

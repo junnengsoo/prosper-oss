@@ -97,7 +97,7 @@ export function isLoopbackHost(host: string): boolean {
 
 export function assertBridgeStartupSafe(host: string, expectedToken: string): void {
   if (!expectedToken && !isLoopbackHost(host)) {
-    throw new Error("WHATSAPP_PA_BRIDGE_TOKEN is required when the bridge binds to a non-loopback host");
+    throw new Error("PROSPER_BRIDGE_TOKEN is required when the bridge binds to a non-loopback host");
   }
 }
 
@@ -148,7 +148,7 @@ export async function handleSendPayload(sock: SendSocket, body: Record<string, u
 export function createBridgeHttpServer(options: BridgeHttpServerOptions): http.Server {
   return http.createServer((request, response) => {
     if (request.method === "GET" && request.url === "/health") {
-      sendJson(response, 200, { ok: true, bridge: "whatsapp-pa-bridge" });
+      sendJson(response, 200, { ok: true, bridge: "prosper-bridge" });
       return;
     }
 

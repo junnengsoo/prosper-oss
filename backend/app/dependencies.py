@@ -10,9 +10,9 @@ def verify_bridge_headers(
     x_whatsapp_bridge_token: str | None = Header(default=None),
 ) -> None:
     settings = get_settings()
-    expected_token = settings.whatsapp_pa_bridge_token.strip()
+    expected_token = settings.bridge_token.strip()
     if settings.auth_required and not expected_token:
-        raise HTTPException(status_code=500, detail="WHATSAPP_PA_BRIDGE_TOKEN is required when AUTH_REQUIRED=true")
+        raise HTTPException(status_code=500, detail="PROSPER_BRIDGE_TOKEN is required when AUTH_REQUIRED=true")
     if expected_token and (not x_whatsapp_bridge_token or not compare_digest(x_whatsapp_bridge_token, expected_token)):
         raise HTTPException(status_code=401, detail="Invalid bridge token")
 

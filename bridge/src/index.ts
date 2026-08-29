@@ -140,7 +140,7 @@ function bridgeStatus(): Record<string, unknown> {
   const bufferedMessageCount = Array.from(inboundBuffers.values()).reduce((total, buffer) => total + buffer.messages.length, 0);
   return {
     ok: true,
-    bridge: "whatsapp-pa-bridge",
+    bridge: "prosper-bridge",
     runtime_dir: RUNTIME_DIR,
     backend_base_url: BACKEND_BASE_URL,
     backend_auth_configured: Boolean(WHATSAPP_BRIDGE_TOKEN),

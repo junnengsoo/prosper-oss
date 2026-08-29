@@ -56,7 +56,7 @@ Deterministic Playbook action planner
 
 The FastAPI backend owns business logic, persistence, prompts, state transitions, and outbound action planning. The React dashboard provides the operator interface, Rental Listing setup, Playbook / Auto Replies setup, audit inspection, and Simulator Conversation surface. The TypeScript bridge owns optional WhatsApp connectivity and forwards normalized messages to the backend.
 
-Dashboard sessions use one configured application password rather than a user database. Successful login creates a signed, expiring `HttpOnly` cookie. The WhatsApp Bridge remains separately authenticated with `WHATSAPP_PA_BRIDGE_TOKEN`; browser sessions are not used for bridge callbacks.
+Dashboard sessions use one configured application password rather than a user database. Successful login creates a signed, expiring `HttpOnly` cookie. The WhatsApp Bridge remains separately authenticated with `PROSPER_BRIDGE_TOKEN`; browser sessions are not used for bridge callbacks.
 
 ## Local Setup
 
@@ -87,7 +87,7 @@ Use Python 3.11, `uv`, Node.js 22, and npm.
    cd ..
    ```
 
-4. Initialize resettable local data and seeded demo configuration:
+4. Initialize resettable local data and seeded sample configuration:
 
    ```bash
    .venv/bin/python -m app.cli init-db
@@ -129,11 +129,13 @@ The supported evaluation path is the Simulator Conversation. It uses the same ba
 For the optional authenticated WhatsApp Bridge, keep the backend and bridge on loopback during local review or configure a private token:
 
 ```env
-WHATSAPP_PA_BRIDGE_TOKEN=replace-with-a-private-token
-BRIDGE_BASE_URL=http://127.0.0.1:8788
-WHATSAPP_PA_BRIDGE_HOST=127.0.0.1
-WHATSAPP_PA_BRIDGE_PORT=8788
+PROSPER_BRIDGE_TOKEN=replace-with-a-private-token
+PROSPER_BRIDGE_BASE_URL=http://127.0.0.1:8788
+PROSPER_BRIDGE_HOST=127.0.0.1
+PROSPER_BRIDGE_PORT=8788
 ```
+
+Existing local `WHATSAPP_PA_*` bridge variables and `BRIDGE_BASE_URL` remain accepted as compatibility aliases, but new setup should use the `PROSPER_*` names shown above.
 
 The bridge can forward inbound messages and can attempt outbound sends. The best-effort outbound delivery boundary is explicit: Prosper records the attempted action and bridge result, but the reference does not implement a transactional outbox, provider idempotency key management, or durable channel-level delivery guarantees.
 
@@ -153,7 +155,7 @@ The simulator also has a scoped reset for fake chat data:
 scripts/fake_chat_smoke.sh --reset
 ```
 
-Do not enter real tenant personal data during public-review demos unless the reviewer has separately approved that handling. DeepSeek-backed runs send prompt inputs to the configured DeepSeek-compatible endpoint. Local audit records may include inbound text, matched listing details, model outputs, errors, and outbound action records.
+Do not enter real tenant personal data during public-review walkthroughs unless the reviewer has separately approved that handling. DeepSeek-backed runs send prompt inputs to the configured DeepSeek-compatible endpoint. Local audit records may include inbound text, matched listing details, model outputs, errors, and outbound action records.
 
 Inbound deduplication is limited to the normalized chat identifier and message identifier received from the simulator or bridge. It protects against replayed inbound events with the same identifiers; it does not prove global person identity, prevent semantic duplicates typed as new messages, or replace channel-level delivery controls.
 

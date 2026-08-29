@@ -1,6 +1,6 @@
 export type AppView = "inbox" | "properties" | "simulator";
 
-export const APP_VIEW_STORAGE_KEY = "whatsapp_pa_active_view";
+export const APP_VIEW_STORAGE_KEY = "prosper_active_view";
 
 export const APP_VIEWS: AppView[] = ["inbox", "properties", "simulator"];
 

@@ -22,13 +22,14 @@ function makeStorage(value: string | null): Storage {
   };
 }
 
-assert(APP_VIEWS.length === 3, "APP_VIEWS should list all MVP dashboard views");
+assert(APP_VIEWS.length === 3, "APP_VIEWS should list all Prosper dashboard views");
+assert(APP_VIEW_STORAGE_KEY === "prosper_active_view", "view storage should use Prosper naming");
 assert(isAppView("inbox"), "inbox should be a valid app view");
 assert(isAppView("properties"), "properties should be a valid app view");
 assert(isAppView("simulator"), "simulator should be a valid app view");
 assert(!isAppView("fake_chat"), "old fake_chat view should not be a current app view");
 assert(!isAppView("prompts"), "old prompts view should not be a current app view");
-assert(!isAppView("playbook"), "playbook should be hidden from the MVP nav");
+assert(!isAppView("playbook"), "playbook should be hidden from the primary nav");
 assert(!isAppView("settings"), "unknown values should not be valid app views");
 assert(!isAppView(null), "null should not be a valid app view");
 

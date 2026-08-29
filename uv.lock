@@ -541,6 +541,42 @@ wheels = [
 ]
 
 [[package]]
+name = "prosper"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "langfuse" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-multipart" },
+    { name = "sqlalchemy" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "langfuse", specifier = ">=3.0.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.3.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.0" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "protobuf"
 version = "7.36.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1241,42 +1277,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/e3/91e297e41381d9131f3142a9c1a50389fd96b98125ce9b81526fa4e14b9f/websockets-17.0.1-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:afbce6e3f0fac32dc87c2a0d84869d1a706460d64f39f3889386413e6e4d3d26", size = 213434 },
     { url = "https://files.pythonhosted.org/packages/09/ce/3929538b2b9918f5eee623fbf3346893973191f6df93f19bbda097bd7bb7/websockets-17.0.1-py3-none-any.whl", hash = "sha256:c6be9cba65c65cc76dfa3d4619e359ff02a4476c74e179b215236c11a0b32345", size = 206718 },
 ]
-
-[[package]]
-name = "whatsapp-pa"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "langfuse" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "python-multipart" },
-    { name = "sqlalchemy" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "langfuse", specifier = ">=3.0.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
-    { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.3.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.0" },
-    { name = "python-multipart", specifier = ">=0.0.20" },
-    { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "wrapt"
