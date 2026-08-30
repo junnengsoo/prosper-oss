@@ -1,8 +1,8 @@
 # Project Briefing
 
-Prosper is a local-first rental-enquiry reference implementation. It shows how an AI-assisted property workflow can accept inbound tenant messages, classify intent, match configured Rental Listings, render deterministic Playbook replies, and preserve local audit records for review.
+Prosper is a local-first WhatsApp rental-enquiry reference implementation. It shows how an AI-assisted property workflow can accept inbound tenant messages, classify intent, match configured Rental Listings, render deterministic Playbook replies, and preserve local audit records.
 
-The supported scope is intentionally narrow: inbound rental enquiries, one operator dashboard, resettable SQLite storage, DeepSeek-backed Pipeline stages, Stage Runs for auditability, and an optional authenticated WhatsApp Bridge. The [Tradeoff Inventory](tradeoff-inventory.md) summarizes what was kept, removed, and deferred during the final cleanup pass.
+The supported scope is intentionally narrow: inbound WhatsApp rental enquiries, one operator dashboard, resettable SQLite storage, DeepSeek-backed Pipeline stages, Stage Runs for auditability, and an authenticated WhatsApp Bridge. The [Tradeoff Inventory](tradeoff-inventory.md) summarizes what was kept, removed, and deferred during the final cleanup pass.
 
 ## Architecture
 
@@ -10,18 +10,18 @@ The backend owns the business workflow. The Pipeline coordinates model-backed tr
 
 The dashboard is the operator surface. It supports Rental Listing setup, Playbook / Auto Replies configuration, Simulator Conversations, inbox review, audit inspection, local media previews, and single-user session authentication. The dashboard talks to same-origin backend APIs and does not share browser session state with the bridge.
 
-The bridge is an optional channel adapter. It normalizes WhatsApp events into the backend's inbound message contract and attempts outbound sends when the backend requests them. It is authenticated separately from the dashboard, exposes only operational status, and remains experimental.
+The bridge is the WhatsApp channel adapter. It normalizes WhatsApp events into the backend's inbound message contract and attempts outbound sends when the backend requests them. It is authenticated separately from the dashboard, exposes only operational status, and remains experimental.
 
 ## Workflow
 
-1. A tenant message enters through the Simulator Conversation path or the optional bridge.
+1. A tenant message enters through the WhatsApp Bridge or the Simulator Conversation path.
 2. The backend normalizes the message, deduplicates it by channel chat and message identifier, and checks pause, ignore, closed-conversation, human-takeover, and send-lock state.
 3. The Pipeline runs triage and Rental Listing matching against configured local data.
 4. Each model-backed stage is schema-validated and written as a Stage Run.
 5. The action planner renders enabled Playbook blocks only after a validated available-listing match.
 6. The result appears in the simulator transcript, the inbox, the audit view, and, when the bridge is configured, the outbound channel attempt record.
 
-The Simulator Conversation is the main review path because it exercises the same backend workflow without requiring a WhatsApp account.
+The Simulator Conversation is the local walkthrough path because it exercises the same backend workflow without requiring a paired phone.
 
 ## Safety Decisions
 
@@ -38,7 +38,7 @@ Prosper keeps the local workflow complete enough to inspect end to end, while av
 
 The project keeps DeepSeek as the explicit live provider so prompts, schema contracts, and evals can stay concrete. Provider-neutral routing is deferred until there is a real compatibility target.
 
-The optional bridge remains because it validates the channel boundary, but it is not the primary review path. Outbound delivery is best effort; a deployment target would need a transactional outbox, channel idempotency keys, and stronger process recovery before tenant messaging should be treated as durable.
+The bridge remains central because WhatsApp is the product channel, while the Baileys implementation keeps the repo runnable without an official WhatsApp Business Platform setup. Outbound delivery is best effort; a deployment target would need a transactional outbox, channel idempotency keys, and stronger process recovery before tenant messaging should be treated as durable.
 
 ## Setup
 
@@ -51,7 +51,7 @@ Use Python 3.11, `uv`, Node.js 22, and npm.
 5. Start the local launcher with `scripts/dev.sh`.
 6. Open `http://127.0.0.1:5173` and use the Simulator Conversation walkthrough from the README.
 
-The optional bridge uses `PROSPER_BRIDGE_TOKEN`, `PROSPER_BRIDGE_BASE_URL`, `PROSPER_BRIDGE_HOST`, and `PROSPER_BRIDGE_PORT`. Existing local bridge aliases are accepted only for compatibility; new setup should use the Prosper-named variables.
+The WhatsApp Bridge uses `PROSPER_BRIDGE_TOKEN`, `PROSPER_BRIDGE_BASE_URL`, `PROSPER_BRIDGE_HOST`, and `PROSPER_BRIDGE_PORT`. Existing local bridge aliases are accepted only for compatibility; new setup should use the Prosper-named variables.
 
 ## What To Inspect
 

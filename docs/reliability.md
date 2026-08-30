@@ -20,7 +20,7 @@ Provider errors, invalid JSON, and invalid output shapes are recorded as failed 
 
 Playbooks render outbound content deterministically from validated stage results. The send lock, action safety checks, bridge retry behavior, and outbound action records provide separate controls around the final side effect.
 
-The optional Baileys bridge is experimental, and outbound WhatsApp delivery is best effort in this reference product. Prosper records attempted outbound actions and bridge results, but a production channel should add a transactional outbox and channel idempotency keys so retries and process restarts do not duplicate or lose sends.
+The Baileys bridge is experimental, and outbound WhatsApp delivery is best effort in this experimental repo. Prosper records attempted outbound actions and bridge results, but a production channel should add a transactional outbox and channel idempotency keys so retries and process restarts do not duplicate or lose sends.
 
 ## Local Media
 

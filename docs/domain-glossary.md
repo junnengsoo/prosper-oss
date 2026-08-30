@@ -32,7 +32,7 @@ The supported local evaluation path in the dashboard. It accepts fake tenant mes
 
 ## WhatsApp Bridge
 
-The optional TypeScript adapter around Baileys. It normalizes WhatsApp events for the backend and attempts outbound sends when asked. It is authenticated separately from browser dashboard sessions and is experimental.
+The TypeScript adapter around Baileys. It normalizes WhatsApp events for the backend and attempts outbound sends when asked. It is authenticated separately from browser dashboard sessions and is experimental.
 
 ## Stage Run
 

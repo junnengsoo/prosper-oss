@@ -1,8 +1,8 @@
 # Prosper
 
-Prosper is an experimental rental-enquiry app for exploring how a single operator can use AI-assisted triage, local audit records, deterministic action planning, and explicit Manual Review boundaries.
+Prosper is an experimental WhatsApp rental-enquiry app for exploring how a single operator can use AI-assisted triage, local audit records, deterministic action planning, and explicit Manual Review boundaries.
 
-The repo is intentionally small and local-first. It works best as a single-user workflow for inbound rental enquiries, with resettable SQLite storage, a simulator for manual walkthroughs, and an optional WhatsApp adapter for local experiments.
+The repo is intentionally small and local-first. It works best as a single-user workflow for inbound WhatsApp rental enquiries, with resettable SQLite storage, a Baileys-based WhatsApp bridge, and a simulator for manual walkthroughs.
 
 ## What It Demonstrates
 
@@ -14,16 +14,16 @@ The repo is intentionally small and local-first. It works best as a single-user 
 - inbound deduplication by channel chat and message identifier.
 - Manual Review fallbacks for provider errors, malformed JSON, unavailable listings, paused automation, and unsafe actions.
 - Stage-run audit records for each pipeline decision.
-- A Simulator Conversation path that exercises the same backend pipeline used by live inbound bridge messages.
+- A Simulator Conversation path that exercises the same backend pipeline used by live inbound WhatsApp messages.
 - Local media uploads stored under `runtime/media`.
-- Optional authenticated WhatsApp Bridge connectivity through Baileys.
+- Authenticated WhatsApp Bridge connectivity through Baileys.
 - Single-user dashboard authentication using signed HTTP-only cookies.
 
 DeepSeek is the sole explicit model provider in this experimental repo. The application can start without `DEEPSEEK_API_KEY`, but the DeepSeek-backed happy path and live evals require that key. Without it, model-backed stages record a safe Manual Review fallback instead of generating a tenant reply.
 
 ## Documentation Map
 
-- [Architecture](docs/architecture.md) describes the backend pipeline, dashboard, and optional bridge boundary.
+- [Architecture](docs/architecture.md) describes the backend pipeline, dashboard, and WhatsApp bridge boundary.
 - [Project Briefing](docs/project-presentation.md) gives a concise guide to architecture, workflow, safety decisions, tradeoffs, setup, and key files.
 - [Tradeoff Inventory](docs/tradeoff-inventory.md) records what Prosper intentionally keeps, removes, and defers.
 - [Reliability Notes](docs/reliability.md) documents duplicate handling, state gates, model failures, outbound delivery, and local retention.
@@ -55,7 +55,7 @@ Deterministic Playbook action planner
       +--> manual review queue
 ```
 
-The FastAPI backend owns business logic, persistence, prompts, state transitions, and outbound action planning. The React dashboard provides the operator interface, Rental Listing setup, Playbook / Auto Replies setup, audit view, and Simulator Conversation surface. The TypeScript bridge owns optional WhatsApp connectivity and forwards normalized messages to the backend.
+The FastAPI backend owns business logic, persistence, prompts, state transitions, and outbound action planning. The React dashboard provides the operator interface, Rental Listing setup, Playbook / Auto Replies setup, audit view, and Simulator Conversation surface. The TypeScript bridge owns WhatsApp connectivity and forwards normalized messages to the backend.
 
 Dashboard sessions use one configured application password rather than a user database. Successful login creates a signed, expiring `HttpOnly` cookie. The WhatsApp Bridge remains separately authenticated with `PROSPER_BRIDGE_TOKEN`; browser sessions are not used for bridge callbacks.
 
@@ -110,7 +110,7 @@ The frontend uses same-origin `/api/...` requests, so any deployment should serv
 
 ## Manual Walkthrough
 
-The supported evaluation path is the Simulator Conversation. It uses the same backend pipeline as live inbound bridge messages while avoiding any WhatsApp account requirement.
+The primary channel is WhatsApp. For local manual walkthroughs, the Simulator Conversation uses the same backend pipeline as live inbound bridge messages without requiring a paired phone.
 
 1. Open `http://127.0.0.1:5173` and select `Properties`.
 2. Create or edit a `Rental Listing`. Fill the listing name, status, listing URL, rent, availability date, bedrooms, bathrooms, and address. Save once the required fields are complete.
@@ -119,9 +119,9 @@ The supported evaluation path is the Simulator Conversation. It uses the same ba
 5. Confirm the simulator transcript shows the inbound message and, when `DEEPSEEK_API_KEY` is configured and the listing is available, the deterministic Playbook reply.
 6. Select `Inbox`, open the matched lead, and inspect `Prosper Audit`. Expand `Decision timeline` and confirm stage runs include `triage`, `rental_listing_matching`, and `outbound_actions`.
 7. Submit an enquiry for an unavailable or ambiguous listing. The expected behavior is Manual Review with no model-generated outbound reply.
-8. Optional: open the WhatsApp panel only after starting the authenticated WhatsApp Bridge. Confirm the bridge reports its connection state or pairing QR. Treat this as an experimental adapter check, not an official WhatsApp integration.
+8. Open the WhatsApp panel after starting the authenticated WhatsApp Bridge. Confirm the bridge reports its connection state or pairing QR. Treat this as an experimental Baileys adapter check, not an official WhatsApp Business Platform integration.
 
-For the optional authenticated WhatsApp Bridge, keep the backend and bridge on loopback during local use or configure a private token:
+For the authenticated WhatsApp Bridge, keep the backend and bridge on loopback during local use or configure a private token:
 
 ```env
 PROSPER_BRIDGE_TOKEN=replace-with-a-private-token

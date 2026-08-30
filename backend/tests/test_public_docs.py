@@ -21,7 +21,7 @@ def assert_contains_all(text: str, phrases: list[str]):
 def test_readme_uses_experimental_single_user_positioning_without_release_overclaiming():
     lowered = README.lower()
 
-    assert "experimental rental-enquiry app" in lowered
+    assert "experimental whatsapp rental-enquiry app" in lowered
     assert "single-user workflow" in lowered
     assert "open-source" not in lowered
     assert "open source" not in lowered
@@ -93,7 +93,7 @@ def test_reviewer_briefing_covers_review_surface_without_brittle_positioning():
         "Simulator Conversation",
         "reset-only SQLite",
         "Manual Review",
-        "optional authenticated WhatsApp Bridge",
+        "authenticated WhatsApp Bridge",
         "scripts/test.sh",
     ]
 
@@ -110,7 +110,7 @@ def test_tradeoff_inventory_is_present_before_final_briefing_concepts():
         TRADEOFF_INVENTORY,
         [
             "Stage Runs as the audit story",
-            "Optional authenticated WhatsApp Bridge",
+            "Authenticated WhatsApp Bridge",
             "Managed operations",
             "Broader product scope",
         ],
@@ -136,6 +136,25 @@ def test_readme_documents_manual_walkthrough_and_release_boundaries():
     ]
 
     assert_contains_all(README, required_phrases)
+
+
+def test_public_docs_treat_whatsapp_as_the_primary_channel():
+    assert "WhatsApp rental-enquiry app" in README
+    assert "Authenticated WhatsApp Bridge connectivity through Baileys" in README
+    assert "The primary channel is WhatsApp" in README
+
+    banned_phrases = [
+        "optional WhatsApp adapter",
+        "Optional authenticated WhatsApp Bridge",
+        "optional authenticated WhatsApp Bridge",
+        "optional bridge",
+        "optional Baileys adapter",
+        "optional channel adapter",
+    ]
+    for path in PUBLIC_DOCS:
+        text = path.read_text()
+        for phrase in banned_phrases:
+            assert phrase not in text, f"{path.relative_to(ROOT_DIR)} contains {phrase!r}"
 
 
 def test_schema_boundary_docs_explain_local_sqlite_production_boundaries():
