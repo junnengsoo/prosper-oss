@@ -15,8 +15,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronLeft, Clock, GripVertical, Image as ImageIcon, Phone, Plus, Send, Trash2 } from "lucide-react";
-import type { PlaybookBlock, PropertyPlaybookInput, PropertyRecord, RuntimeConfigValues } from "../api";
+import { CheckCircle2, ChevronLeft, Clock, GripVertical, Image as ImageIcon, LockKeyhole, MessageSquare, PauseCircle, Phone, Plus, Send, Trash2, UnlockKeyhole, WifiOff } from "lucide-react";
+import type { ReactNode } from "react";
+import type { PlaybookBlock, PropertyPlaybookInput, PropertyRecord, RuntimeConfigValues, RuntimeStatus } from "../api";
 import type { AutoReplyField } from "../propertyEditorState";
 import {
   DEFAULT_AUTO_REPLY_SEQUENCES,
@@ -39,6 +40,7 @@ export function AutoRepliesEditor({
   dirty,
   setDraft,
   config,
+  runtimeStatus,
   disabled,
 }: {
   property: PropertyRecord | null;
@@ -46,15 +48,19 @@ export function AutoRepliesEditor({
   dirty: boolean;
   setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
   config: RuntimeConfigValues;
+  runtimeStatus: RuntimeStatus | null;
   disabled: boolean;
 }) {
+  const whatsappConnected = runtimeStatus?.bridge.connection === "open";
+  const aiPaused = config.pause_ai === "true";
+  const sendLocked = config.send_lock === "true";
   return (
     <section className="autoRepliesLayout">
       <div className="autoRepliesForm">
         <div className="autoRepliesHeader">
           <div>
             <h2>Auto Replies</h2>
-            <p>Edit the WhatsApp messages Prosper sends for this listing.</p>
+            <p>Configure the WhatsApp reply sequence for this listing.</p>
           </div>
           <label className="toggleRow">
             <input
@@ -70,10 +76,31 @@ export function AutoRepliesEditor({
 
         {disabled && <EmptyState title="Save listing first" body="Create the property before editing its Auto Replies." />}
 
+        <div className="whatsappReplyStatus" aria-label="WhatsApp auto reply status">
+          <StatusItem
+            icon={whatsappConnected ? <CheckCircle2 size={16} /> : <WifiOff size={16} />}
+            label="WhatsApp"
+            value={whatsappConnected ? "Online" : "Offline"}
+            tone={whatsappConnected ? "success" : "danger"}
+          />
+          <StatusItem
+            icon={aiPaused ? <PauseCircle size={16} /> : <MessageSquare size={16} />}
+            label="Automation"
+            value={aiPaused ? "Paused" : "Ready"}
+            tone={aiPaused ? "warning" : "success"}
+          />
+          <StatusItem
+            icon={sendLocked ? <LockKeyhole size={16} /> : <UnlockKeyhole size={16} />}
+            label="Sending"
+            value={sendLocked ? "Locked" : "Enabled"}
+            tone={sendLocked ? "danger" : "success"}
+          />
+        </div>
+
         <article className="replyGroup">
           <header>
-            <strong>When Unit Is Available</strong>
-            <span>Prosper sends this after matching this property.</span>
+            <strong>When WhatsApp enquiry matches this available unit</strong>
+            <span>The bridge sends these messages in order, then sends the enabled gallery media.</span>
           </header>
           <AutoReplySequence
             field="availableInitial"
@@ -87,11 +114,21 @@ export function AutoRepliesEditor({
 
       <aside className="autoPreviewPane">
         <div>
-          <span className="eyebrow">Available Preview</span>
+          <span className="eyebrow">WhatsApp Preview</span>
           <WhatsAppPreview property={property} blocks={draft.initial_reply_blocks} config={config} />
         </div>
       </aside>
     </section>
+  );
+}
+
+function StatusItem({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: "success" | "warning" | "danger" }) {
+  return (
+    <div className={`replyStatusItem ${tone}`}>
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 

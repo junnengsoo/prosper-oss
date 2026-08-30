@@ -223,12 +223,12 @@ async function createListingThroughEditor(
     await page.getByLabel("Enabled").check();
     await page.getByLabel("Message 1").fill(`Hi, yes {unit_info} is available.`);
     await page.getByLabel("Message 2").fill(options.replyText || "Please send your preferred viewing slots.");
-    await expect(page.getByText("Available Preview")).toBeVisible();
+    await expect(page.getByText("WhatsApp Preview")).toBeVisible();
     await expect(page.locator(".phoneBubble.outbound", { hasText: options.replyText || "Please send your preferred viewing slots." })).toBeVisible();
     await expectUsableViewport(page, [
       page.getByLabel("Enabled"),
       page.getByLabel("Message 1"),
-      page.getByText("Available Preview"),
+      page.getByText("WhatsApp Preview"),
     ]);
   }
 

@@ -39,6 +39,54 @@
   background: #fff;
 }
 
+.whatsappReplyStatus {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.replyStatusItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  min-height: 58px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.replyStatusItem svg {
+  grid-row: span 2;
+}
+
+.replyStatusItem span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.replyStatusItem strong {
+  font-size: 14px;
+}
+
+.replyStatusItem.success svg,
+.replyStatusItem.success strong {
+  color: var(--green-dark);
+}
+
+.replyStatusItem.warning svg,
+.replyStatusItem.warning strong {
+  color: #9a6700;
+}
+
+.replyStatusItem.danger svg,
+.replyStatusItem.danger strong {
+  color: var(--danger);
+}
+
 .replyGroup header {
   display: grid;
   gap: 3px;
@@ -309,7 +357,8 @@
 
 @media (max-width: 760px) {
   .autoRepliesLayout,
-  .autoRepliesHeader {
+  .autoRepliesHeader,
+  .whatsappReplyStatus {
     grid-template-columns: 1fr;
   }
 

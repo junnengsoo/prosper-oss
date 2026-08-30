@@ -642,6 +642,7 @@ function App() {
             playbookDirty={autoRepliesDirty}
             setPlaybookDraft={setPlaybookDraft}
             config={config}
+            runtimeStatus={runtimeStatus}
             onBack={() => setEditingPropertyId(null)}
             onSave={() => runAction(savePropertyAndExit, "Property saved")}
             onDelete={editingProperty ? () => runAction(() => deleteSelectedProperties([editingProperty.property_id]), "Property deleted") : undefined}
