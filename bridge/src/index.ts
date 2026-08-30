@@ -12,7 +12,6 @@ import { Boom } from "@hapi/boom";
 import fs from "node:fs/promises";
 import http from "node:http";
 import P from "pino";
-import qrcode from "qrcode-terminal";
 
 import {
   AUTH_DIR,
@@ -808,11 +807,6 @@ async function connectSocket(): Promise<void> {
           console.error("[bridge] Failed to request pairing code:", error);
         });
       return;
-    }
-
-    if (update.qr && !WHATSAPP_PAIRING_PHONE_NUMBER) {
-      console.log("[bridge] Scan this QR code with WhatsApp:");
-      qrcode.generate(update.qr, { small: true });
     }
 
     if (update.connection === "open") {

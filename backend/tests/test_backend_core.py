@@ -20,7 +20,7 @@ from app.database.models import AppConfig, Contact, Conversation, Message, Prope
 from app.pipeline import route_stored_conversation_after_inbound
 from app.playbooks import list_property_playbooks, upsert_property_playbook
 from app.schemas import BridgeInboundMessage, ContactOut, ConversationOut, PlaybookBlock, PropertyIn, PropertyMediaIn, PropertyPlaybookIn
-from app.database.seed import seed_all
+from app.database.seed import seed_all, seed_property_playbooks
 import app.pipeline as pipeline_module
 from app.services import (
     append_message,
@@ -607,6 +607,16 @@ def test_playbook_crud(session):
     assert playbook.property_id == "RTF-001"
     assert playbook.initial_reply_blocks == [{"type": "message", "text": "Hi {property_name}"}]
     assert "RTF-001" in {row.property_id for row in list_property_playbooks(session)}
+
+
+def test_seed_creates_starter_playbooks_for_seeded_properties(session):
+    add_property(session, "RTF-002")
+    seed_property_playbooks(session, {"RTF-002"})
+    playbooks = {row.property_id: row for row in list_property_playbooks(session)}
+
+    assert playbooks["RTF-002"].enabled is True
+    assert playbooks["RTF-002"].initial_reply_blocks
+
 
 def test_auth_required_rejects_missing_session_cookie(monkeypatch):
     monkeypatch.setenv("AUTH_REQUIRED", "true")

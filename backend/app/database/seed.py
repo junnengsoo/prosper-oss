@@ -97,4 +97,5 @@ def seed_property_playbooks(session: Session, property_ids: set[str] | None = No
 def seed_all(session: Session) -> None:
     seed_app_config(session)
     seed_properties(session)
+    seed_property_playbooks(session)
     session.commit()
