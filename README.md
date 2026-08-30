@@ -61,7 +61,7 @@ Dashboard sessions use one configured application password rather than a user da
 
 ## Local Setup
 
-Use Python 3.11, `uv`, Node.js 22, and npm.
+Use Python 3.11, `uv`, Node.js 22 or newer, and npm. The repository includes `.node-version` with the CI baseline version.
 
 1. Copy the environment template:
 
@@ -79,28 +79,22 @@ Use Python 3.11, `uv`, Node.js 22, and npm.
 
    Keep real secrets out of commits, logs, screenshots, and PR bodies. If a separate worktree is used locally, copy the local `.env` into that worktree because ignored files are not shared between worktrees.
 
-3. Install dependencies:
+3. Run the setup script:
 
    ```bash
-   uv sync --locked --extra dev --python 3.11
-   cd frontend && npm ci
-   cd ../bridge && npm ci
-   cd ..
+   scripts/setup.sh
    ```
 
-4. Initialize resettable local data and seeded sample configuration:
+   This installs the locked Python and Node dependencies, creates `.env` if it does not already exist, and initializes resettable local data with seeded sample configuration.
+   Internally, the backend install uses `uv sync --locked --extra dev --python 3.11`: `--locked` keeps dependency versions exactly aligned with `uv.lock`, `--extra dev` includes the local test and development tools, and `--python 3.11` selects the supported backend Python version.
 
-   ```bash
-   .venv/bin/python -m app.cli init-db
-   ```
-
-5. Start the supported local launcher:
+4. Start the supported local launcher:
 
    ```bash
    scripts/dev.sh
    ```
 
-6. Open the dashboard at `http://127.0.0.1:5173`.
+5. Open the dashboard at `http://127.0.0.1:5173`.
 
 For a protected dashboard session, set these backend variables before launching:
 

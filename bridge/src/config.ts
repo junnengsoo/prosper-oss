@@ -7,6 +7,7 @@ function envValue(primary: string, legacy?: string): string | undefined {
 
 const explicitEnvFile = envValue("PROSPER_ENV_FILE", "WHATSAPP_PA_ENV_FILE");
 dotenv.config({ path: path.resolve("..", ".env.prod") });
+dotenv.config({ path: path.resolve("..", ".env") });
 if (explicitEnvFile) {
   dotenv.config({ path: path.resolve("..", explicitEnvFile), override: true });
 }

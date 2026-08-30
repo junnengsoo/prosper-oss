@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "test": "tsx tests/config.test.ts && tsx tests/normalize.test.ts && tsx tests/backend.test.ts && tsx tests/sendServer.test.ts && tsx tests/sendHttpServer.test.ts && tsx tests/pairing.test.ts",
+    "test": "tsx tests/config.test.ts && tsx tests/rootEnv.test.ts && tsx tests/normalize.test.ts && tsx tests/backend.test.ts && tsx tests/sendServer.test.ts && tsx tests/sendHttpServer.test.ts && tsx tests/pairing.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
