@@ -49,6 +49,8 @@ export function InboxView({
   const matchingRun = selectedStageRuns.find((run) => run.stage === "rental_listing_matching" || run.stage === "unit_matching");
   const outboundRun = selectedStageRuns.find((run) => run.stage === "outbound_actions");
   const matchingOutput = stageOutput(matchingRun);
+  const outboundOutput = stageOutput(outboundRun);
+  const triageOutput = stageOutput(triageRun) ?? objectOutput(outboundOutput?.triage);
   const outboundMessage = [...messages].reverse().find((message) => message.direction === "outbound" || message.direction === "from_me");
   const responseDecision = responseDecisionForConversation(outboundMessage, selectedProperty, outboundRun);
 
@@ -132,9 +134,11 @@ export function InboxView({
                 <div className="aiDecision">
                   <div className="cardTitle">
                     <span>Triage</span>
-                    <b className={classNames("badge", statusTone(triageRun?.status))}>{stageDecision(triageRun, "Not recorded")}</b>
+                    <b className={classNames("badge", statusTone(triageRun?.status ?? stageStatusFromOutput(triageOutput)))}>
+                      {triageRun ? stageDecision(triageRun, "Not recorded") : outputDecision(triageOutput, "Not recorded")}
+                    </b>
                   </div>
-                  <p>{stageSummary(triageRun)}</p>
+                  <p>{triageRun ? stageSummary(triageRun) : outputSummary(triageOutput, "No triage decision recorded.")}</p>
                 </div>
                 <div className="aiDecision">
                   <div className="cardTitle">
@@ -149,9 +153,9 @@ export function InboxView({
                 <div className="aiDecision">
                   <div className="cardTitle">
                     <span>Response decision</span>
-                    <b className={classNames("badge", statusTone(outboundRun?.status))}>{stageDecision(outboundRun, "Not recorded")}</b>
+                    <b className={classNames("badge", responseDecision.tone)}>{responseDecision.label}</b>
                   </div>
-                  <p>{outboundRun ? stageSummary(outboundRun) : "No response decision recorded."}</p>
+                  <p>{responseDecision.detail}</p>
                 </div>
               </div>
             </details>
@@ -167,10 +171,14 @@ function stageOutput(run?: StageRun | null): Record<string, unknown> | null {
   if (!run?.output_json) return null;
   try {
     const parsed = JSON.parse(run.output_json) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    return objectOutput(parsed);
   } catch {
     return null;
   }
+}
+
+function objectOutput(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function stageDecision(run: StageRun | undefined, fallback: string): string {
@@ -178,6 +186,25 @@ function stageDecision(run: StageRun | undefined, fallback: string): string {
   if (run.status === "success") return "Passed";
   if (run.status === "manual_review") return "Needs review";
   return statusLabel(run.status);
+}
+
+function stageStatusFromOutput(output: Record<string, unknown> | null): string | null {
+  if (!output) return null;
+  if (output.stage_status === "manual_review" || output.match_status === "manual_review") return "manual_review";
+  return "success";
+}
+
+function outputDecision(output: Record<string, unknown> | null, fallback: string): string {
+  const status = stageStatusFromOutput(output);
+  if (status === "success") return "Passed";
+  if (status === "manual_review") return "Needs review";
+  return fallback;
+}
+
+function outputSummary(output: Record<string, unknown> | null, fallback: string): string {
+  if (!output) return fallback;
+  const reason = output.reason ?? output.summary ?? output.status ?? output.match_status;
+  return typeof reason === "string" && reason ? reason : fallback;
 }
 
 function responseDecisionForConversation(

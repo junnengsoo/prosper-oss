@@ -561,7 +561,14 @@ def test_unavailable_matched_listing_records_manual_review_without_bridge_reques
 def test_api_schema_invalid_triage_records_manual_review_without_matching_or_outbound(api_client, session, monkeypatch):
     import app.routers.simulator as simulator_router
 
-    async def triage_with_invalid_schema(session_arg, thread, generator=..., conversation_id=None, persist_input_snapshot=True):
+    async def triage_with_invalid_schema(
+        session_arg,
+        thread,
+        generator=...,
+        conversation_id=None,
+        persist_input_snapshot=True,
+        record_run=True,
+    ):
         async def generator(messages):
             return {"is_initial_rental_enquiry": True, "confidence": "maybe", "reason": "invalid confidence"}
 
@@ -571,6 +578,7 @@ def test_api_schema_invalid_triage_records_manual_review_without_matching_or_out
             generator,
             conversation_id=conversation_id,
             persist_input_snapshot=persist_input_snapshot,
+            record_run=record_run,
         )
 
     async def fail_if_matching_runs(session_arg, conversation_id):
@@ -590,6 +598,66 @@ def test_api_schema_invalid_triage_records_manual_review_without_matching_or_out
     assert payload["result"]["send_result"]["status"] == "manual_review"
     assert payload["conversation_id"] is not None
     assert outbound_texts(session, payload["conversation_id"]) == []
+
+
+def test_new_simulator_conversation_links_pretriage_stage_run(api_client, session, monkeypatch):
+    import app.routers.simulator as simulator_router
+
+    property_ = add_property(session, "RTF-PRETRIAGE")
+    upsert_property_playbook(
+        session,
+        property_.property_id,
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Yes, {property_name} is available."}]),
+    )
+    session.commit()
+
+    async def high_confidence_triage(
+        session_arg,
+        thread,
+        generator=...,
+        conversation_id=None,
+        persist_input_snapshot=True,
+        record_run=True,
+    ):
+        async def generator(messages):
+            return {
+                "is_initial_rental_enquiry": True,
+                "confidence": "high",
+                "reason": "Message asks about rental availability.",
+            }
+
+        return await pipeline_module.run_triage_text(
+            session_arg,
+            thread,
+            generator,
+            conversation_id=conversation_id,
+            persist_input_snapshot=persist_input_snapshot,
+            record_run=record_run,
+        )
+
+    async def fake_matching(session_arg, conversation_id):
+        conversation = session_arg.get(Conversation, conversation_id)
+        conversation.matched_property_id = property_.property_id
+        return matched_listing_result(property_.property_id)
+
+    monkeypatch.setattr(simulator_router, "run_triage_text", high_confidence_triage)
+    monkeypatch.setattr(simulator_router, "run_rental_listing_matching_pipeline", fake_matching)
+
+    response = api_client.post(
+        "/api/fake-chat/inbound-and-run",
+        json={"chat_jid": "pretriage-link@s.whatsapp.net", "text": "Hi, is 301C available?", "display_name": "Pretriage Link"},
+    )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+    assert conversation_id is not None
+
+    triage_run = session.scalar(
+        select(StageRun).where(StageRun.conversation_id == conversation_id, StageRun.stage == "triage")
+    )
+    assert triage_run is not None
+    assert json.loads(triage_run.output_json)["reason"] == "Message asks about rental availability."
+    assert not session.scalars(select(StageRun).where(StageRun.conversation_id.is_(None), StageRun.stage == "triage")).all()
 
 
 def test_playbook_crud(session):

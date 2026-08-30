@@ -203,6 +203,7 @@ async def run_triage_text(
     generator: JsonGenerator = generate_json,
     conversation_id: int | None = None,
     persist_input_snapshot: bool = True,
+    record_run: bool = True,
 ) -> dict[str, Any]:
     """Run triage on raw text before or outside a stored conversation."""
     llm_messages = build_triage_messages(thread)
@@ -214,7 +215,8 @@ async def run_triage_text(
         )
     except (LlmNotConfiguredError, LlmProviderError, json.JSONDecodeError, ValueError) as error:
         result = manual_review_stage_result(str(error))
-        record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, str(error))
+        if record_run:
+            record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, str(error))
         return result
 
     try:
@@ -222,18 +224,36 @@ async def run_triage_text(
     except ValidationError as error:
         reason = f"Invalid triage output: {error}"
         result = manual_review_stage_result(reason)
-        record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        if record_run:
+            record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
         return result
 
     result = parsed.model_dump()
     if parsed.confidence != "high":
         reason = "Triage confidence is not high enough for automatic handling"
         result = {"stage_status": MANUAL_REVIEW_STAGE, "reason": reason, "triage": result}
-        record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
+        if record_run:
+            record_stage_run(session, conversation_id, "triage", input_snapshot, result, MANUAL_REVIEW_STAGE, reason)
         return result
 
-    record_stage_run(session, conversation_id, "triage", input_snapshot, result, "success")
+    if record_run:
+        record_stage_run(session, conversation_id, "triage", input_snapshot, result, "success")
     return result
+
+
+def record_triage_result_for_conversation(session: Session, conversation_id: int, result: dict[str, Any]) -> StageRun:
+    """Attach pre-storage triage output to the conversation created from it."""
+    status = MANUAL_REVIEW_STAGE if result.get("stage_status") == MANUAL_REVIEW_STAGE else "success"
+    error = result.get("reason") if status == MANUAL_REVIEW_STAGE and isinstance(result.get("reason"), str) else None
+    return record_stage_run(
+        session,
+        conversation_id,
+        "triage",
+        "[redacted pre-conversation triage input]",
+        result,
+        status,
+        error,
+    )
 
 
 async def run_rental_listing_matching(

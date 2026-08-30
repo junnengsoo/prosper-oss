@@ -9,6 +9,7 @@ from ..database.models import Contact, Conversation
 from ..dependencies import BridgeContext
 from ..pipeline import (
     is_manual_review_result,
+    record_triage_result_for_conversation,
     route_stored_conversation_after_inbound,
     run_rental_listing_matching_pipeline,
     run_triage_text,
@@ -90,8 +91,15 @@ async def bridge_inbound(
     session: Session = Depends(get_session),
     _bridge_scope: object = BridgeContext,
 ) -> BridgeAck:
+    triage = None
     if should_pretriage_before_storing(session, payload):
-        triage = await run_triage_text(session, payload.text, conversation_id=None, persist_input_snapshot=False)
+        triage = await run_triage_text(
+            session,
+            payload.text,
+            conversation_id=None,
+            persist_input_snapshot=False,
+            record_run=False,
+        )
         if not triage_is_initial_enquiry(triage) and triage.get("stage_status") != "manual_review":
             contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
             session.commit()
@@ -103,12 +111,14 @@ async def bridge_inbound(
 
     accepted, reason, data = handle_bridge_inbound(session, payload)
     if reason == "stored_inbound_message" and data.get("conversation_id") and not is_ai_paused(session):
-        if "triage" in locals() and triage_is_initial_enquiry(triage):
+        if triage is not None:
+            record_triage_result_for_conversation(session, int(data["conversation_id"]), triage)
+        if triage_is_initial_enquiry(triage):
             conversation = session.get(Conversation, int(data["conversation_id"]))
             if conversation:
                 conversation.current_stage = "rental_listing_matching"
             result = {"triage": triage, **await run_rental_listing_matching_pipeline(session, int(data["conversation_id"]))}
-        elif "triage" in locals() and is_manual_review_result(triage):
+        elif is_manual_review_result(triage):
             result = route_triage_manual_review(session, session.get(Conversation, int(data["conversation_id"])), triage)
         else:
             result = await route_stored_conversation_after_inbound(session, int(data["conversation_id"]))
@@ -138,6 +148,7 @@ async def bridge_inbound_batch(
                 render_bridge_batch_thread(payload.messages),
                 conversation_id=None,
                 persist_input_snapshot=False,
+                record_run=False,
             )
             if not triage_is_initial_enquiry(pretriage_result) and pretriage_result.get("stage_status") != "manual_review":
                 latest = max(payload.messages, key=lambda message: message.timestamp_ms)
@@ -172,6 +183,8 @@ async def bridge_inbound_batch(
         conversation = session.get(Conversation, pipeline_conversation_id)
         contact = session.get(Contact, conversation.contact_id) if conversation else None
         if contact and contact.status == "active":
+            if pretriage_result:
+                record_triage_result_for_conversation(session, pipeline_conversation_id, pretriage_result)
             if pretriage_result and triage_is_initial_enquiry(pretriage_result):
                 if conversation:
                     conversation.current_stage = "rental_listing_matching"

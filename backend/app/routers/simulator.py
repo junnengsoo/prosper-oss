@@ -8,6 +8,7 @@ from ..database.models import Contact, Conversation, Message
 from ..dependencies import DashboardContext
 from ..pipeline import (
     is_manual_review_result,
+    record_triage_result_for_conversation,
     route_stored_conversation_after_inbound,
     run_rental_listing_matching_pipeline,
     run_triage_text,
@@ -75,22 +76,31 @@ async def fake_inbound_and_run(
         session.commit()
         return PipelineRunResponse(conversation_id=None, result={"stage_status": "skipped", "reason": "contact_paused"})
 
+    triage = None
     if not existing_conversation and not is_ai_paused(session):
-        triage = await run_triage_text(session, payload.text, conversation_id=None, persist_input_snapshot=False)
+        triage = await run_triage_text(
+            session,
+            payload.text,
+            conversation_id=None,
+            persist_input_snapshot=False,
+            record_run=False,
+        )
         if not triage_is_initial_enquiry(triage) and triage.get("stage_status") != "manual_review":
             contact = get_or_create_contact(session, payload.chat_jid, payload.display_name)
             session.commit()
             return PipelineRunResponse(conversation_id=None, result={"triage": triage})
 
     message = handle_fake_inbound(session, payload)
+    if triage is not None:
+        record_triage_result_for_conversation(session, message.conversation_id, triage)
     if is_ai_paused(session):
         result = {"stage_status": "paused", "reason": "Global AI pause is enabled"}
-    elif "triage" in locals() and triage_is_initial_enquiry(triage):
+    elif triage_is_initial_enquiry(triage):
         conversation = session.get(Conversation, message.conversation_id)
         if conversation:
             conversation.current_stage = "rental_listing_matching"
         result = {"triage": triage, **await run_rental_listing_matching_pipeline(session, message.conversation_id)}
-    elif "triage" in locals() and is_manual_review_result(triage):
+    elif is_manual_review_result(triage):
         result = route_triage_manual_review(session, session.get(Conversation, message.conversation_id), triage)
     else:
         result = await route_stored_conversation_after_inbound(session, message.conversation_id)
