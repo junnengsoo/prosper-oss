@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
-  Bell,
   Building2,
   CheckCircle2,
   Clock,
@@ -11,7 +10,6 @@ import {
   MessageSquare,
   Phone,
   RefreshCw,
-  Settings,
   UnlockKeyhole,
   UserCircle,
   X,
@@ -262,7 +260,6 @@ function App() {
   const selectedContact = selectedConversation ? contacts.find((contact) => contact.id === selectedConversation.contact_id) ?? null : null;
   const selectedProperty = selectedConversation?.matched_property_id ? properties.find((property) => property.property_id === selectedConversation.matched_property_id) ?? null : null;
   const selectedStageRuns = selectedConversation ? stageRuns.filter((run) => run.conversation_id === selectedConversation.id) : [];
-  const latestStageRun = selectedStageRuns[0] ?? null;
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -576,7 +573,6 @@ function App() {
           config={config}
           status={status}
           currentUser={currentUser}
-          onRefresh={() => void loadAll()}
           onOpenWhatsappConnection={() => setWhatsappPanelOpen(true)}
           onToggleSendLock={() => runAction(() => toggleConfig("send_lock"))}
           onLogout={currentUser ? logout : undefined}
@@ -612,7 +608,6 @@ function App() {
             selectedContact={selectedContact}
             selectedProperty={selectedProperty}
             messages={messages}
-            latestStageRun={latestStageRun}
             selectedStageRuns={selectedStageRuns}
             onOpenProperty={selectedProperty ? () => openPropertyEditor(selectedProperty) : undefined}
           />
@@ -736,7 +731,6 @@ function TopBar({
   config,
   status,
   currentUser,
-  onRefresh,
   onOpenWhatsappConnection,
   onToggleSendLock,
   onLogout,
@@ -746,7 +740,6 @@ function TopBar({
   config: RuntimeConfigValues;
   status: string;
   currentUser: Me | null;
-  onRefresh: () => void;
   onOpenWhatsappConnection: () => void;
   onToggleSendLock: () => void;
   onLogout?: () => void;
@@ -769,8 +762,6 @@ function TopBar({
           {sendLocked ? <LockKeyhole size={15} /> : <UnlockKeyhole size={15} />}
           Sending {sendLocked ? "Locked" : "Enabled"}
         </button>
-        <button className="iconButton" onClick={onRefresh} title="Refresh"><Settings size={18} /></button>
-        <Bell size={19} className="mutedIcon" />
         {currentUser && onLogout ? (
           <button className="logoutButton" onClick={onLogout}>
             <span>{initials(currentUser.email || currentUser.auth_user_id)}</span>

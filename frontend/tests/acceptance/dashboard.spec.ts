@@ -155,13 +155,14 @@ test("dashboard configures listings, audits simulator decisions, and stays usabl
   await expect(availableLead).toBeVisible();
   await availableLead.click();
   await expect(page.getByText("Prosper Audit")).toBeVisible();
-  await page.getByText("Decision timeline").click();
-  await expect(page.locator(".timelineList strong").filter({ hasText: "rental_listing_matching" }).first()).toBeVisible();
-  await expect(page.locator(".timelineList strong").filter({ hasText: "outbound_actions" }).first()).toBeVisible();
+  await page.getByText("Prosper Audit").click();
+  await expect(page.locator(".aiDecision", { hasText: "Rental listing matching" })).toBeVisible();
+  await expect(page.locator(".aiDecision", { hasText: "Response decision" })).toBeVisible();
   await expect(page.locator(".messageThread .bubble.inbound", { hasText: inboxAvailableText })).toBeVisible();
   await expectUsableViewport(page, [
     page.getByPlaceholder("Search for leads"),
     page.getByText("Prosper Audit"),
+    page.locator(".aiDecision", { hasText: "Rental listing matching" }),
     page.locator(".messageThread .bubble.inbound", { hasText: inboxAvailableText }),
   ]);
 

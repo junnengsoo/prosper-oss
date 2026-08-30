@@ -112,8 +112,9 @@
 
 .leadHeader span,
 .matchedPropertyCard span,
-.auditCard p,
-.timelineList span {
+.responseCard p,
+.aiDecision p,
+.detailMeta {
   color: var(--muted);
   font-size: 13px;
 }
@@ -126,10 +127,10 @@
 }
 
 .matchedPropertyCard,
-.auditCard {
+.responseCard {
   background: #fff;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 16px;
 }
 
@@ -140,6 +141,10 @@
   align-items: center;
 }
 
+.noMatchCard {
+  display: block;
+}
+
 .matchedPropertyCard strong,
 .matchedPropertyCard b {
   display: block;
@@ -147,9 +152,30 @@
   margin-bottom: 4px;
 }
 
-.auditCard {
+.summaryEyebrow {
+  display: block;
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.matchedPropertyStatus {
+  margin-top: 8px;
+}
+
+.responseCard {
   display: grid;
   gap: 12px;
+}
+
+.responseCard p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .cardTitle {
@@ -161,22 +187,57 @@
   font-size: 12px;
 }
 
-.timelineList {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
+.aiDetails {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
 }
 
-.timelineList div {
-  display: flex;
-  justify-content: space-between;
+.aiDetails summary {
+  cursor: pointer;
+  padding: 13px 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.aiDetails[open] summary {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.aiDetailsBody {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  border-top: 1px solid var(--border-soft);
-  padding-top: 8px;
+  padding: 14px 16px 16px;
+}
+
+.aiDecision {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+.aiDecision p {
+  margin: 10px 0 0;
+  line-height: 1.45;
+}
+
+.detailMeta {
+  display: block;
+  margin-top: 8px;
 }
 
 @media (max-width: 1200px) {
   .leadSummaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .aiDetailsBody {
     grid-template-columns: 1fr;
   }
 }
@@ -217,10 +278,5 @@
 
   .matchedPropertyCard button {
     grid-column: 1 / -1;
-  }
-
-  .timelineList div {
-    display: grid;
-    gap: 3px;
   }
 }

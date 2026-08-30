@@ -6,10 +6,11 @@ import {
   EmptyState,
   formatMoney,
   formatTime,
-  formatDateTime,
   GalleryPreview,
   initials,
   MessageThread,
+  propertyAvailabilityLabel,
+  propertyAvailabilityTone,
   stageSummary,
   statusLabel,
   statusTone,
@@ -28,7 +29,6 @@ export function InboxView({
   selectedContact,
   selectedProperty,
   messages,
-  latestStageRun,
   selectedStageRuns,
   onOpenProperty,
 }: {
@@ -42,10 +42,16 @@ export function InboxView({
   selectedContact: Contact | null;
   selectedProperty: PropertyRecord | null;
   messages: Message[];
-  latestStageRun: StageRun | null;
   selectedStageRuns: StageRun[];
   onOpenProperty?: () => void;
 }) {
+  const triageRun = selectedStageRuns.find((run) => run.stage === "triage");
+  const matchingRun = selectedStageRuns.find((run) => run.stage === "rental_listing_matching" || run.stage === "unit_matching");
+  const outboundRun = selectedStageRuns.find((run) => run.stage === "outbound_actions");
+  const matchingOutput = stageOutput(matchingRun);
+  const outboundMessage = [...messages].reverse().find((message) => message.direction === "outbound" || message.direction === "from_me");
+  const responseDecision = responseDecisionForConversation(outboundMessage, selectedProperty, outboundRun);
+
   return (
     <section className="inboxLayout">
       <aside className="leadListPane">
@@ -93,38 +99,105 @@ export function InboxView({
               </div>
             </div>
             <div className="leadSummaryGrid">
-              <article className="matchedPropertyCard">
-                <GalleryPreview media={selectedProperty?.media ?? []} />
-                <div>
-                  <strong>{selectedProperty?.property_name || selectedConversation.matched_property_id}</strong>
-                  <span>{selectedProperty?.full_address || "Matched property"}</span>
-                  <b>{formatMoney(selectedProperty?.asking_rent)}</b>
-                </div>
-                {onOpenProperty && <button onClick={onOpenProperty}>Edit</button>}
-              </article>
-              <article className="auditCard">
-                <div className="cardTitle">
-                  <span>Prosper Audit</span>
-                  <b className={classNames("badge", statusTone(latestStageRun?.status))}>{statusLabel(latestStageRun?.status)}</b>
-                </div>
-                <p>{stageSummary(latestStageRun)}</p>
-                <details>
-                  <summary>Decision timeline</summary>
-                  <div className="timelineList">
-                    {selectedStageRuns.map((run) => (
-                      <div key={run.id}>
-                        <strong>{run.stage}</strong>
-                        <span>{statusLabel(run.status)} · {formatDateTime(run.created_at)}</span>
-                      </div>
-                    ))}
+              {selectedProperty ? (
+                <article className="matchedPropertyCard">
+                  <GalleryPreview media={selectedProperty.media} />
+                  <div>
+                    <span className="summaryEyebrow">Matched listing</span>
+                    <strong>{selectedProperty.property_name}</strong>
+                    <span>{selectedProperty.full_address || "Matched property"}</span>
+                    <b>{formatMoney(selectedProperty.asking_rent)}</b>
+                    <span className={classNames("badge", propertyAvailabilityTone(selectedProperty.status), "matchedPropertyStatus")}>
+                      {propertyAvailabilityLabel(selectedProperty.status)}
+                    </span>
                   </div>
-                </details>
+                  {onOpenProperty && <button type="button" onClick={onOpenProperty}>Edit</button>}
+                </article>
+              ) : (
+                <article className="matchedPropertyCard noMatchCard">
+                  <span className="summaryEyebrow">No listing matched</span>
+                </article>
+              )}
+              <article className="responseCard">
+                <div className="cardTitle">
+                  <span>Prosper response</span>
+                  <b className={classNames("badge", responseDecision.tone)}>{responseDecision.label}</b>
+                </div>
+                <p>{responseDecision.detail}</p>
               </article>
             </div>
+            <details className="aiDetails">
+              <summary>Prosper Audit</summary>
+              <div className="aiDetailsBody">
+                <div className="aiDecision">
+                  <div className="cardTitle">
+                    <span>Triage</span>
+                    <b className={classNames("badge", statusTone(triageRun?.status))}>{stageDecision(triageRun, "Not recorded")}</b>
+                  </div>
+                  <p>{stageSummary(triageRun)}</p>
+                </div>
+                <div className="aiDecision">
+                  <div className="cardTitle">
+                    <span>Rental listing matching</span>
+                    <b className={classNames("badge", statusTone(matchingRun?.status))}>{stageDecision(matchingRun, "Not run")}</b>
+                  </div>
+                  <p>{stageSummary(matchingRun)}</p>
+                  {typeof matchingOutput?.matched_by === "string" && matchingOutput.matched_by && (
+                    <span className="detailMeta">Matched by {matchingOutput.matched_by.replace(/_/g, " ")}</span>
+                  )}
+                </div>
+                <div className="aiDecision">
+                  <div className="cardTitle">
+                    <span>Response decision</span>
+                    <b className={classNames("badge", statusTone(outboundRun?.status))}>{stageDecision(outboundRun, "Not recorded")}</b>
+                  </div>
+                  <p>{outboundRun ? stageSummary(outboundRun) : "No response decision recorded."}</p>
+                </div>
+              </div>
+            </details>
             <MessageThread messages={messages} />
           </>
         )}
       </section>
     </section>
   );
+}
+
+function stageOutput(run?: StageRun | null): Record<string, unknown> | null {
+  if (!run?.output_json) return null;
+  try {
+    const parsed = JSON.parse(run.output_json) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function stageDecision(run: StageRun | undefined, fallback: string): string {
+  if (!run) return fallback;
+  if (run.status === "success") return "Passed";
+  if (run.status === "manual_review") return "Needs review";
+  return statusLabel(run.status);
+}
+
+function responseDecisionForConversation(
+  outboundMessage: Message | undefined,
+  property: PropertyRecord | null,
+  outboundRun?: StageRun,
+): { label: string; tone: "success" | "warning" | "danger" | "neutral"; detail: string } {
+  if (outboundMessage) {
+    return property?.status === "available"
+      ? { label: "Available reply sent", tone: "success", detail: "Prosper sent the available-listing Playbook reply." }
+      : { label: "Reply sent", tone: "success", detail: "Prosper sent an automated follow-up reply." };
+  }
+
+  if (outboundRun?.status === "manual_review") {
+    return { label: "Manual Review", tone: "warning", detail: "Prosper did not send an automated reply for this enquiry." };
+  }
+
+  if (outboundRun?.status === "blocked" || outboundRun?.status === "failed") {
+    return { label: "Reply blocked", tone: "danger", detail: stageSummary(outboundRun) };
+  }
+
+  return { label: "No reply sent", tone: "warning", detail: "No automated response was sent for this enquiry." };
 }
