@@ -15,9 +15,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CheckCircle2, ChevronLeft, Clock, GripVertical, Image as ImageIcon, LockKeyhole, MessageSquare, PauseCircle, Phone, Plus, Send, Trash2, UnlockKeyhole, WifiOff } from "lucide-react";
-import type { ReactNode } from "react";
-import type { PlaybookBlock, PropertyPlaybookInput, PropertyRecord, RuntimeConfigValues, RuntimeStatus } from "../api";
+import { ChevronLeft, Clock, GripVertical, Image as ImageIcon, MessageSquare, Phone, Plus, Send, Trash2 } from "lucide-react";
+import { useRef } from "react";
+import type { PlaybookBlock, PropertyPlaybookInput, PropertyRecord, RuntimeConfigValues } from "../api";
 import type { AutoReplyField } from "../propertyEditorState";
 import {
   DEFAULT_AUTO_REPLY_SEQUENCES,
@@ -27,6 +27,7 @@ import {
   playbookWithAutoReplyBlocks,
 } from "../playbookState";
 import {
+  classNames,
   EmptyState,
   GalleryPreview,
   initials,
@@ -40,7 +41,6 @@ export function AutoRepliesEditor({
   dirty,
   setDraft,
   config,
-  runtimeStatus,
   disabled,
 }: {
   property: PropertyRecord | null;
@@ -48,19 +48,15 @@ export function AutoRepliesEditor({
   dirty: boolean;
   setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
   config: RuntimeConfigValues;
-  runtimeStatus: RuntimeStatus | null;
   disabled: boolean;
 }) {
-  const whatsappConnected = runtimeStatus?.bridge.connection === "open";
-  const aiPaused = config.pause_ai === "true";
-  const sendLocked = config.send_lock === "true";
   return (
     <section className="autoRepliesLayout">
       <div className="autoRepliesForm">
         <div className="autoRepliesHeader">
           <div>
             <h2>Auto Replies</h2>
-            <p>Configure the WhatsApp reply sequence for this listing.</p>
+            <p>Edit the WhatsApp messages Prosper sends for this listing.</p>
           </div>
           <label className="toggleRow">
             <input
@@ -76,31 +72,12 @@ export function AutoRepliesEditor({
 
         {disabled && <EmptyState title="Save listing first" body="Create the property before editing its Auto Replies." />}
 
-        <div className="whatsappReplyStatus" aria-label="WhatsApp auto reply status">
-          <StatusItem
-            icon={whatsappConnected ? <CheckCircle2 size={16} /> : <WifiOff size={16} />}
-            label="WhatsApp"
-            value={whatsappConnected ? "Online" : "Offline"}
-            tone={whatsappConnected ? "success" : "danger"}
-          />
-          <StatusItem
-            icon={aiPaused ? <PauseCircle size={16} /> : <MessageSquare size={16} />}
-            label="Automation"
-            value={aiPaused ? "Paused" : "Ready"}
-            tone={aiPaused ? "warning" : "success"}
-          />
-          <StatusItem
-            icon={sendLocked ? <LockKeyhole size={16} /> : <UnlockKeyhole size={16} />}
-            label="Sending"
-            value={sendLocked ? "Locked" : "Enabled"}
-            tone={sendLocked ? "danger" : "success"}
-          />
-        </div>
-
-        <article className="replyGroup">
-          <header>
-            <strong>When WhatsApp enquiry matches this available unit</strong>
-            <span>The bridge sends these messages in order, then sends the enabled gallery media.</span>
+        <article className="replyGroup sequenceGroup">
+          <header className="replyGroupHeader">
+            <div>
+              <strong>When Unit Is Available</strong>
+            </div>
+            <b className="badge success">Current status</b>
           </header>
           <AutoReplySequence
             field="availableInitial"
@@ -108,27 +85,16 @@ export function AutoRepliesEditor({
             setDraft={setDraft}
             disabled={disabled}
           />
-          <div className="mediaStepNote"><ImageIcon size={17} /> Prosper sends this unit's media after the reply.</div>
         </article>
       </div>
 
       <aside className="autoPreviewPane">
         <div>
-          <span className="eyebrow">WhatsApp Preview</span>
+          <span className="eyebrow">Available Preview</span>
           <WhatsAppPreview property={property} blocks={draft.initial_reply_blocks} config={config} />
         </div>
       </aside>
     </section>
-  );
-}
-
-function StatusItem({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: "success" | "warning" | "danger" }) {
-  return (
-    <div className={`replyStatusItem ${tone}`}>
-      {icon}
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 
@@ -143,11 +109,20 @@ function AutoReplySequence({
   setDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
   disabled: boolean;
 }) {
+  const blockIdsRef = useRef<string[]>([]);
+  const blockIdCounterRef = useRef(0);
+  while (blockIdsRef.current.length < blocks.length) {
+    blockIdsRef.current.push(`${field}-block-${blockIdCounterRef.current}`);
+    blockIdCounterRef.current += 1;
+  }
+  if (blockIdsRef.current.length > blocks.length) {
+    blockIdsRef.current.splice(blocks.length);
+  }
+  const sortableItems = blockIdsRef.current.slice(0, blocks.length);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const itemIds = blocks.map((_, index) => blockId(index));
 
   function commit(nextBlocks: PlaybookBlock[]) {
     setDraft((current) => playbookWithAutoReplyBlocks(current, field, nextBlocks));
@@ -170,28 +145,46 @@ function AutoReplySequence({
     commit(nextBlocks);
   }
 
+  function addDelay() {
+    const nextBlocks: PlaybookBlock[] = [...blocks];
+    if (nextBlocks.length === 0 || nextBlocks[nextBlocks.length - 1].type === "delay") return;
+    nextBlocks.push({ type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS });
+    commit(nextBlocks);
+  }
+
+  function addGallery() {
+    const nextBlocks: PlaybookBlock[] = [...blocks];
+    if (nextBlocks.length > 0 && nextBlocks[nextBlocks.length - 1].type !== "delay") {
+      nextBlocks.push({ type: "delay", seconds: DEFAULT_MESSAGE_DELAY_SECONDS });
+    }
+    nextBlocks.push({ type: "gallery", mode: "enabled_property_gallery" });
+    commit(nextBlocks);
+  }
+
   function removeBlock(index: number) {
     const nextBlocks = blocks.filter((_, blockIndex) => blockIndex !== index);
+    blockIdsRef.current.splice(index, 1);
     commit(nextBlocks.length > 0 ? nextBlocks : DEFAULT_AUTO_REPLY_SEQUENCES[field]);
   }
 
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (disabled || !over || active.id === over.id) return;
-    const oldIndex = itemIds.indexOf(String(active.id));
-    const newIndex = itemIds.indexOf(String(over.id));
+    const oldIndex = sortableItems.indexOf(String(active.id));
+    const newIndex = sortableItems.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
+    blockIdsRef.current = arrayMove(blockIdsRef.current, oldIndex, newIndex);
     commit(arrayMove(blocks, oldIndex, newIndex));
   }
 
   return (
-    <div className="autoReplySequence">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={sortableItems} strategy={verticalListSortingStrategy}>
+        <div className="autoReplySequence">
           {blocks.map((block, index) => (
             <SortableAutoReplyBlock
-              key={blockId(index)}
-              id={blockId(index)}
+              key={sortableItems[index]}
+              id={sortableItems[index]}
               block={block}
               index={index}
               blocks={blocks}
@@ -201,12 +194,20 @@ function AutoReplySequence({
               onAppendPlaceholder={(placeholder) => appendPlaceholder(index, placeholder)}
             />
           ))}
-        </SortableContext>
-      </DndContext>
-      <button type="button" className="secondaryButton autoReplyAddButton" onClick={addMessage} disabled={disabled}>
-        <Plus size={16} /> Add message
-      </button>
-    </div>
+          <div className="autoReplyAddRow">
+            <button type="button" className="secondaryButton autoReplyAddButton" onClick={addMessage} disabled={disabled}>
+              <Plus size={16} /> Add message
+            </button>
+            <button type="button" className="secondaryButton autoReplyAddButton" onClick={addDelay} disabled={disabled || blocks[blocks.length - 1]?.type === "delay"}>
+              <Clock size={16} /> Add delay
+            </button>
+            <button type="button" className="secondaryButton autoReplyAddButton" onClick={addGallery} disabled={disabled}>
+              <ImageIcon size={16} /> Add gallery
+            </button>
+          </div>
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -234,65 +235,88 @@ function SortableAutoReplyBlock({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const dragHandle = (
+    <button
+      type="button"
+      className="dragHandle"
+      aria-label="Drag to reorder"
+      disabled={disabled}
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical size={16} />
+    </button>
+  );
 
   if (block.type === "delay") {
     return (
-      <div ref={setNodeRef} style={style} className={`autoReplyDelay ${isDragging ? "dragging" : ""}`}>
-        <button type="button" className="dragHandle" aria-label="Reorder delay" disabled={disabled} {...attributes} {...listeners}>
-          <GripVertical size={15} />
-        </button>
-        <Clock size={16} />
-        <span>Wait</span>
-        <input
-          type="number"
-          min="0"
-          max="30"
-          step="0.5"
-          value={block.seconds ?? DEFAULT_MESSAGE_DELAY_SECONDS}
-          onChange={(event) => onUpdate({ seconds: Number(event.target.value) })}
-          disabled={disabled}
-        />
-        <span>seconds</span>
-        <button type="button" className="iconButton" onClick={onRemove} disabled={disabled} aria-label="Remove delay">
-          <Trash2 size={15} />
-        </button>
+      <div ref={setNodeRef} style={style} className={classNames("sequenceNodeFrame", isDragging && "dragging")}>
+        <div className="sequenceNode delayNode">
+          <div className="sequenceNodeHeader">
+            {dragHandle}
+            <Clock size={16} />
+            <span>Delay</span>
+            <button type="button" className="iconButton" onClick={onRemove} disabled={disabled} aria-label="Remove delay">
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (block.type === "gallery") {
+    return (
+      <div ref={setNodeRef} style={style} className={classNames("sequenceNodeFrame", isDragging && "dragging")}>
+        <div className="sequenceNode galleryNode">
+          <div className="sequenceNodeHeader">
+            {dragHandle}
+            <ImageIcon size={16} />
+            <span>Gallery</span>
+            <button type="button" className="iconButton" onClick={onRemove} disabled={disabled} aria-label="Remove gallery">
+              <Trash2 size={15} />
+            </button>
+          </div>
+          <strong>Send enabled property media</strong>
+          <p>Uses this property for available replies.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <label ref={setNodeRef} style={style} className={`autoReplyTextarea ${isDragging ? "dragging" : ""}`}>
-      <span>
-        <button type="button" className="dragHandle" aria-label="Reorder auto reply block" disabled={disabled} {...attributes} {...listeners}>
-          <GripVertical size={15} />
-        </button>
-        Message {messageNumber(blocks, index)}
-      </span>
-      <textarea
-        aria-label={`Message ${messageNumber(blocks, index)}`}
-        rows={4}
-        value={block.text ?? ""}
-        onChange={(event) => onUpdate({ text: event.target.value })}
-        disabled={disabled}
-      />
-      <div className="placeholderRow">
-        {PLACEHOLDERS.map((placeholder) => (
-          <button key={placeholder} type="button" onClick={() => onAppendPlaceholder(placeholder)} disabled={disabled}>
-            {placeholder}
-          </button>
-        ))}
-        {blocks.filter((item) => item.type === "message").length > 1 && (
-          <button type="button" className="dangerTextButton" onClick={onRemove} disabled={disabled}>
-            <Trash2 size={14} /> Remove
-          </button>
-        )}
+    <div ref={setNodeRef} style={style} className={classNames("sequenceNodeFrame", isDragging && "dragging")}>
+      <div className="sequenceNode messageNode">
+        <div className="sequenceNodeHeader">
+          {dragHandle}
+          <MessageSquare size={16} />
+          <span>Message {messageNumber(blocks, index)}</span>
+          {blocks.filter((item) => item.type === "message").length > 1 && (
+            <button type="button" className="iconButton" onClick={onRemove} disabled={disabled} aria-label="Remove message">
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
+        <label className="autoReplyTextarea">
+          <span>Send WhatsApp message</span>
+          <textarea
+            aria-label={`Message ${messageNumber(blocks, index)}`}
+            rows={4}
+            value={block.text ?? ""}
+            onChange={(event) => onUpdate({ text: event.target.value })}
+            disabled={disabled}
+          />
+          <div className="placeholderRow">
+            {PLACEHOLDERS.map((placeholder) => (
+              <button key={placeholder.token} type="button" onClick={() => onAppendPlaceholder(placeholder.token)} disabled={disabled}>
+                {placeholder.label}
+              </button>
+            ))}
+          </div>
+        </label>
       </div>
-    </label>
+    </div>
   );
-}
-
-function blockId(index: number): string {
-  return `playbook-block-${index}`;
 }
 
 function messageNumber(blocks: PlaybookBlock[], index: number): number {
@@ -312,7 +336,7 @@ function WhatsAppPreview({ property, blocks, config }: { property: PropertyRecor
         <span className="todayPill">Today</span>
         <div className="phoneBubble inbound">Hi, I'm interested in {property?.property_name || "this unit"}. Is it still available?</div>
         {blocks.map((block, index) => {
-          if (block.type === "delay") return <div key={index} className="delayPill">{block.seconds ?? 1}s delay</div>;
+          if (block.type === "delay") return <div key={index} className="delayPill">Delay</div>;
           if (block.type === "gallery") {
             return (
               <div key={index} className="phoneBubble outbound mediaBubble">

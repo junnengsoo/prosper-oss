@@ -14,6 +14,7 @@ function assert(condition: unknown, message: string) {
 const defaultInput = defaultPlaybookInput();
 assert(defaultInput.initial_reply_blocks.at(-1)?.type === "gallery", "default playbook should end with the property gallery block");
 assert(autoReplyBlocks(defaultInput, "availableInitial").filter((block) => block.type === "message").length === 2, "default playbook should expose two editable messages");
+assert(autoReplyBlocks(defaultInput, "availableInitial").at(-1)?.type === "gallery", "default playbook should expose gallery as an editable block");
 
 const legacyPlaybook: PropertyPlaybook = {
   id: 1,
@@ -42,8 +43,15 @@ const editedBlocks: PlaybookBlock[] = [
   { type: "message", text: "Second {property_guru_listing}" },
 ];
 const edited = playbookWithAutoReplyBlocks(defaultInput, "availableInitial", editedBlocks);
-assert(edited.initial_reply_blocks.length === 4, "edited playbook should include messages, delay, and gallery");
-assert(edited.initial_reply_blocks.at(-1)?.type === "gallery", "edited playbook should keep gallery after editable blocks");
+assert(edited.initial_reply_blocks.length === 3, "edited playbook should preserve exactly the edited block list");
+assert(!edited.initial_reply_blocks.some((block) => block.type === "gallery"), "edited playbook should not force a removed gallery block back in");
+
+const editedWithGallery = playbookWithAutoReplyBlocks(defaultInput, "availableInitial", [
+  ...editedBlocks,
+  { type: "delay", seconds: 1 },
+  { type: "gallery", mode: "enabled_property_gallery" },
+]);
+assert(editedWithGallery.initial_reply_blocks.at(-1)?.type === "gallery", "edited playbook should preserve gallery when it is present");
 
 const cleaned = cleanAutoRepliesForSave({
   enabled: true,

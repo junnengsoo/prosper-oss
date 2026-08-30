@@ -1,8 +1,11 @@
 import type { PlaybookBlock, PropertyPlaybook, PropertyPlaybookInput } from "./api";
 import type { AutoReplyField } from "./propertyEditorState";
 
-export const PLACEHOLDERS = ["{unit_info}", "{property_guru_listing}"];
-export const DEFAULT_MESSAGE_DELAY_SECONDS = 0.5;
+export const PLACEHOLDERS: Array<{ token: string; label: string }> = [
+  { token: "{unit_info}", label: "Unit info" },
+  { token: "{property_guru_listing}", label: "Listing URL" },
+];
+export const DEFAULT_MESSAGE_DELAY_SECONDS = 1;
 
 export const DEFAULT_AUTO_REPLIES: Record<AutoReplyField, string> = {
   availableInitial: "Hi, yes this unit is still available.",
@@ -66,6 +69,7 @@ export function effectiveAutoReplyInput(playbook: PropertyPlaybook | null | unde
 export function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReplyField): PlaybookBlock[] {
   const editableBlocks = blocks.filter((block) => {
     if (block.type === "delay") return true;
+    if (block.type === "gallery") return true;
     if (block.type !== "message") return false;
     return !STOCK_GALLERY_CAPTIONS.has((block.text || "").trim());
   });
@@ -73,10 +77,7 @@ export function compactAutoReplyBlocks(blocks: PlaybookBlock[], field: AutoReply
 }
 
 export function autoReplyWorkflowBlocks(field: AutoReplyField, blocks: PlaybookBlock[]): PlaybookBlock[] {
-  return [
-    ...compactAutoReplyBlocks(blocks, field),
-    { type: "gallery", mode: "enabled_property_gallery" },
-  ];
+  return compactAutoReplyBlocks(blocks, field);
 }
 
 export function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField): PlaybookBlock[] {
@@ -86,7 +87,7 @@ export function autoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyFi
 export function playbookWithAutoReplyBlocks(input: PropertyPlaybookInput, field: AutoReplyField, blocks: PlaybookBlock[]): PropertyPlaybookInput {
   return {
     ...input,
-    initial_reply_blocks: [...compactAutoReplyBlocks(blocks, field), { type: "gallery", mode: "enabled_property_gallery" }],
+    initial_reply_blocks: compactAutoReplyBlocks(blocks, field),
   };
 }
 
@@ -99,11 +100,15 @@ export function cleanAutoReplyBlocksForSave(blocks: PlaybookBlock[], field: Auto
     }
     if (block.type === "delay" && cleaned.length > 0 && cleaned[cleaned.length - 1].type !== "delay") {
       cleaned.push({ type: "delay", seconds: block.seconds ?? DEFAULT_MESSAGE_DELAY_SECONDS });
+      continue;
+    }
+    if (block.type === "gallery") {
+      cleaned.push({ type: "gallery", mode: "enabled_property_gallery" });
     }
   }
   while (cleaned[cleaned.length - 1]?.type === "delay") cleaned.pop();
   if (!cleaned.some((block) => block.type === "message")) cleaned.push(...DEFAULT_AUTO_REPLY_SEQUENCES[field]);
-  return [...cleaned, { type: "gallery", mode: "enabled_property_gallery" }];
+  return cleaned;
 }
 
 export function cleanAutoRepliesForSave(input: PropertyPlaybookInput): PropertyPlaybookInput {
