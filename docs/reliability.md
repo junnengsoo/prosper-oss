@@ -26,7 +26,7 @@ The Baileys bridge is experimental, and outbound WhatsApp delivery is best effor
 
 Uploaded property media is stored under `runtime/media` by default. The database stores the file path and metadata, while the authenticated backend serves previews and the WhatsApp bridge reads the same local file. Deployments must persist and back up the runtime directory.
 
-The local CLI can create a verified pilot backup of the active SQLite database and managed property media with `.venv/bin/python -m app.cli backup`. The archive is self-describing through a manifest and intentionally excludes environment files, bridge authentication state, logs, caches, build output, and previous backups.
+The local CLI can create a verified backup of the active SQLite database and managed property media with `.venv/bin/python -m app.cli backup`. The archive is self-describing through a manifest and intentionally excludes environment files, bridge authentication state, logs, caches, build output, and previous backups.
 
 ## Privacy and Retention
 

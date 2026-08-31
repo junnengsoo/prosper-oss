@@ -4,7 +4,7 @@ This inventory records the final public-review wording decisions behind Prosper'
 
 ## Kept
 
-- Local-first review path: The Simulator Conversation, local SQLite storage, seeded Rental Listings, verified pilot backups, and local media directory stay because they make the workflow reproducible without external channel setup.
+- Local-first review path: The Simulator Conversation, local SQLite storage, seeded Rental Listings, verified backups, and local media directory stay because they make the workflow reproducible without external channel setup.
 - DeepSeek-backed model stages: DeepSeek remains the sole named live provider because the prompts, schemas, and evals are written around that contract. Missing credentials fall back to Manual Review so setup still succeeds.
 - Stage Runs as the audit story: Local stage records stay because they expose inputs, outputs, statuses, and errors at the workflow level without requiring external tracing.
 - Deterministic Playbook / Auto Replies: Final tenant-facing replies are rendered from configured Playbook blocks after validated model output, keeping the last action predictable.

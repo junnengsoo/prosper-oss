@@ -144,7 +144,7 @@ SQLite is reset-only SQLite storage for this release. Database migrations are in
 .venv/bin/python -m app.cli init-db
 ```
 
-Create a verified pilot backup of the active SQLite database and managed property media with:
+Create a verified backup of the active SQLite database and managed property media with:
 
 ```bash
 .venv/bin/python -m app.cli backup

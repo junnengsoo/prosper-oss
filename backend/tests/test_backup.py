@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tarfile
 
-from app.backup import verify_pilot_backup
+from app.backup import verify_backup
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -57,12 +57,12 @@ def test_cli_backup_creates_verified_archive_with_managed_media_boundaries(tmp_p
     _insert_media(database_path, "RTF-001", "photo", secret_file, True)
     _insert_media(database_path, "RTF-001", "photo", symlink_path, True)
 
-    completed = _run_cli(["backup", "--output-dir", str(output_dir), "--name", "pilot"], tmp_path, database_path, media_root)
+    completed = _run_cli(["backup", "--output-dir", str(output_dir), "--name", "smoke"], tmp_path, database_path, media_root)
 
-    assert "Created verified Prosper pilot backup:" in completed.stdout
-    archive_path = output_dir / "pilot.tar.gz"
+    assert "Created verified Prosper backup:" in completed.stdout
+    archive_path = output_dir / "smoke.tar.gz"
     assert archive_path.is_file()
-    assert verify_pilot_backup(archive_path)["manifest_version"] == 1
+    assert verify_backup(archive_path)["manifest_version"] == 1
 
     with tarfile.open(archive_path, "r:gz") as archive:
         names = sorted(archive.getnames())
@@ -109,7 +109,7 @@ def test_cli_backup_failure_leaves_no_complete_archive(tmp_path):
     output_dir_file.write_text("not a directory")
 
     failed = _run_cli(
-        ["backup", "--output-dir", str(output_dir_file), "--name", "pilot"],
+        ["backup", "--output-dir", str(output_dir_file), "--name", "smoke"],
         tmp_path,
         database_path,
         media_root,
@@ -117,7 +117,7 @@ def test_cli_backup_failure_leaves_no_complete_archive(tmp_path):
     )
 
     assert failed.returncode != 0
-    assert not (runtime / "pilot.tar.gz").exists()
+    assert not (runtime / "smoke.tar.gz").exists()
     assert not list(runtime.glob("*.incomplete"))
 
 

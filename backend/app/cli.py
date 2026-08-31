@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from .backup import create_pilot_backup
+from .backup import create_backup
 from .database.connection import SessionLocal, init_db
 from .database.models import PropertyPlaybook
 from .database.seed import DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS, seed_all, seed_property_playbooks
@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands.add_parser("init-db", help="Initialize the database and seed sample data")
     subcommands.add_parser("show-config", help="Show application config")
 
-    backup = subcommands.add_parser("backup", help="Create a verified pilot backup archive")
+    backup = subcommands.add_parser("backup", help="Create a verified backup archive")
     backup.add_argument("--output-dir", type=Path, help="Directory for the completed backup archive")
     backup.add_argument("--name", help="Archive file name; .tar.gz is added when omitted")
 
@@ -67,8 +67,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         init_database()
         return
     if args.command == "backup":
-        result = create_pilot_backup(args.output_dir, name=args.name)
-        print(f"Created verified Prosper pilot backup: {result.archive_path}")
+        result = create_backup(args.output_dir, name=args.name)
+        print(f"Created verified Prosper backup: {result.archive_path}")
         return
 
     init_db()

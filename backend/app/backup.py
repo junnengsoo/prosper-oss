@@ -55,7 +55,7 @@ class BackupResult:
     manifest: dict[str, Any]
 
 
-def create_pilot_backup(output_dir: Path | None = None, *, name: str | None = None) -> BackupResult:
+def create_backup(output_dir: Path | None = None, *, name: str | None = None) -> BackupResult:
     settings = get_settings()
     source_database = _sqlite_database_path(settings.database_url)
     if not source_database.is_file():
@@ -88,7 +88,7 @@ def create_pilot_backup(output_dir: Path | None = None, *, name: str | None = No
 
             manifest: dict[str, Any] = {
                 "manifest_version": MANIFEST_VERSION,
-                "backup_type": "prosper_pilot_backup",
+                "backup_type": "prosper_backup",
                 "created_at": created_at,
                 "source": {
                     "database": str(source_database),
@@ -111,7 +111,7 @@ def create_pilot_backup(output_dir: Path | None = None, *, name: str | None = No
                 for media_path, archive_path, _metadata in media_entries:
                     archive.add(media_path, arcname=archive_path, recursive=False)
 
-            verify_pilot_backup(incomplete_archive)
+            verify_backup(incomplete_archive)
             incomplete_archive.replace(final_archive)
             return BackupResult(archive_path=final_archive, manifest=manifest)
     except Exception:
@@ -120,7 +120,7 @@ def create_pilot_backup(output_dir: Path | None = None, *, name: str | None = No
         raise
 
 
-def verify_pilot_backup(archive_path: Path) -> dict[str, Any]:
+def verify_backup(archive_path: Path) -> dict[str, Any]:
     with tarfile.open(archive_path, "r:gz") as archive:
         members = archive.getmembers()
         _validate_archive_members(members)
@@ -162,9 +162,9 @@ def verify_pilot_backup(archive_path: Path) -> dict[str, Any]:
 def _sqlite_database_path(database_url: str) -> Path:
     url = make_url(database_url)
     if not url.drivername.startswith("sqlite"):
-        raise ValueError("Pilot backups support SQLite databases only")
+        raise ValueError("Prosper backups support SQLite databases only")
     if not url.database or url.database == ":memory:":
-        raise ValueError("Pilot backups require a file-backed SQLite database")
+        raise ValueError("Prosper backups require a file-backed SQLite database")
     path = Path(url.database).expanduser()
     if not path.is_absolute():
         path = ROOT_DIR / path
@@ -180,7 +180,7 @@ def _backup_archive_name(name: str | None) -> str:
             archive_name = f"{archive_name}.tar.gz"
         return archive_name
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"prosper-pilot-backup-{stamp}.tar.gz"
+    return f"prosper-backup-{stamp}.tar.gz"
 
 
 def _copy_sqlite_snapshot(source_database: Path, snapshot_path: Path) -> None:
