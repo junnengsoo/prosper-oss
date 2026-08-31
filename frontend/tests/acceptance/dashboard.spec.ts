@@ -174,6 +174,112 @@ test("dashboard configures listings, audits simulator decisions, and stays usabl
   await expectNoHorizontalDocumentOverflow(page);
 });
 
+test("protects rental listing drafts while gallery changes remain immediate", async ({ page, request }, testInfo) => {
+  const suffix = testInfo.project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() + `-${Date.now()}`;
+  const propertyId = `PROP-DRAFT-${suffix}`.toUpperCase();
+  const propertyName = `Draft Guard ${suffix}`;
+  const savedPropertyName = `${propertyName} Saved`;
+  const discardedPropertyName = `${propertyName} Discarded`;
+  const savedReply = `Saved reply ${suffix}`;
+  const galleryPath = `/tmp/prosper-gallery-${suffix}.jpg`;
+
+  await createListingViaApi(request, {
+    propertyId,
+    propertyName,
+    listingUrl: `https://example.test/listings/${suffix}`,
+  });
+
+  const draftSaves = trackDraftSaveRequests(page, propertyId);
+  await openProperties(page);
+  await openListingEditor(page, propertyName);
+
+  await page.getByRole("button", { name: "Auto Replies" }).click();
+  await expect(page.getByRole("heading", { name: "Auto Replies" })).toBeVisible();
+  expect(draftSaves.property).toBe(0);
+  expect(draftSaves.playbook).toBe(0);
+
+  await page.getByLabel("Enabled").check();
+  await page.getByRole("button", { name: "Listing Facts" }).click();
+  await expect(page.getByLabel("Property name")).toHaveValue(propertyName);
+  expect(draftSaves.property).toBe(0);
+  expect(draftSaves.playbook).toBe(0);
+
+  await page.getByLabel("Property name").fill(discardedPropertyName);
+  await page.getByRole("button", { name: "Inbox", exact: true }).click();
+  await expectUnsavedDraftDialog(page);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("heading", { name: propertyName })).toBeVisible();
+  await expect(page.getByLabel("Property name")).toHaveValue(discardedPropertyName);
+
+  await page.getByRole("button", { name: "Inbox", exact: true }).click();
+  await expectUnsavedDraftDialog(page);
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByPlaceholder("Search for leads")).toBeVisible();
+
+  await openProperties(page);
+  await openListingEditor(page, propertyName);
+  await expect(page.getByLabel("Property name")).toHaveValue(propertyName);
+  await page.getByRole("button", { name: "Auto Replies" }).click();
+  await expect(page.getByLabel("Enabled")).not.toBeChecked();
+
+  await page.getByRole("button", { name: "Listing Facts" }).click();
+  await page.getByLabel("Property name").fill(savedPropertyName);
+  await page.getByRole("button", { name: "Gallery" }).click();
+  await expect(page.getByRole("heading", { name: "Gallery" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Unsaved property draft" })).toHaveCount(0);
+  expect(draftSaves.property).toBe(0);
+  expect(draftSaves.playbook).toBe(0);
+  await page.getByRole("button", { name: "Listing Facts" }).click();
+  await expect(page.getByLabel("Property name")).toHaveValue(savedPropertyName);
+  await page.getByRole("button", { name: "Auto Replies" }).click();
+  await page.getByLabel("Enabled").check();
+  await page.getByLabel("Message 1").fill(savedReply);
+
+  const propertySaveResponse = page.waitForResponse(
+    (response) => response.url() === `${API_BASE}/api/properties` && response.request().method() === "POST",
+  );
+  const playbookSaveResponse = page.waitForResponse(
+    (response) => response.url() === `${API_BASE}/api/properties/${encodeURIComponent(propertyId)}/playbook` && response.request().method() === "PUT",
+  );
+  await page.getByRole("button", { name: "Simulator", exact: true }).click();
+  await expectUnsavedDraftDialog(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  expect((await propertySaveResponse).ok()).toBeTruthy();
+  expect((await playbookSaveResponse).ok()).toBeTruthy();
+  await expect(page.getByPlaceholder("Type a fake tenant WhatsApp message...")).toBeVisible();
+
+  await openProperties(page);
+  await openListingEditor(page, savedPropertyName);
+  await page.getByRole("button", { name: "Auto Replies" }).click();
+  await expect(page.getByLabel("Enabled")).toBeChecked();
+  await expect(page.getByLabel("Message 1")).toHaveValue(savedReply);
+
+  const backDraftName = `${propertyName} Back`;
+  await page.getByRole("button", { name: "Listing Facts" }).click();
+  await page.getByLabel("Property name").fill(backDraftName);
+  await page.getByRole("button", { name: "Back" }).first().click();
+  await expectUnsavedDraftDialog(page);
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByRole("button", { name: /New Listing/ })).toBeVisible();
+
+  await openListingEditor(page, savedPropertyName);
+  await page.getByRole("button", { name: "Gallery" }).click();
+  const mediaResponse = page.waitForResponse(
+    (response) => response.url() === `${API_BASE}/api/properties/${encodeURIComponent(propertyId)}/media` && response.request().method() === "POST",
+  );
+  await page.getByPlaceholder("Local file path or storage reference").fill(galleryPath);
+  await page.getByPlaceholder("Caption").fill("Immediate gallery item");
+  await page.getByRole("button", { name: "Add path" }).click();
+  expect((await mediaResponse).ok()).toBeTruthy();
+  await expect(page.getByText(galleryPath)).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).first().click();
+  await expect(page.getByRole("button", { name: /New Listing/ })).toBeVisible();
+  await openListingEditor(page, savedPropertyName);
+  await page.getByRole("button", { name: "Gallery" }).click();
+  await expect(page.getByText(galleryPath)).toBeVisible();
+});
+
 async function openInbox(page: Page) {
   await page.getByRole("button", { name: "Inbox", exact: true }).click();
   await expect(page.getByPlaceholder("Search for leads")).toBeVisible();
@@ -234,6 +340,52 @@ async function createListingThroughEditor(
 
   await page.getByRole("button", { name: /Save & Exit/ }).click();
   await expect(page.getByRole("button", { name: /New Listing/ })).toBeVisible();
+}
+
+async function createListingViaApi(
+  request: APIRequestContext,
+  options: { propertyId: string; propertyName: string; listingUrl: string },
+) {
+  const response = await request.post(`${API_BASE}/api/properties`, {
+    data: {
+      property_id: options.propertyId,
+      property_name: options.propertyName,
+      status: "available",
+      property_type: "rental",
+      bedrooms: 2,
+      bathrooms: 2,
+      asking_rent: 4200,
+      available_from: "Immediate",
+      full_address: `${options.propertyName}, Singapore`,
+      property_url: options.listingUrl,
+      propertyguru_listing_id: "",
+      tenant_facing_caveats: "",
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
+async function openListingEditor(page: Page, propertyName: string) {
+  const card = page.locator(".listingCard", { hasText: propertyName });
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("heading", { name: propertyName })).toBeVisible();
+}
+
+function trackDraftSaveRequests(page: Page, propertyId: string) {
+  const counts = { property: 0, playbook: 0 };
+  page.on("request", (request) => {
+    if (request.url() === `${API_BASE}/api/properties` && request.method() === "POST") counts.property += 1;
+    if (request.url() === `${API_BASE}/api/properties/${encodeURIComponent(propertyId)}/playbook` && request.method() === "PUT") counts.playbook += 1;
+  });
+  return counts;
+}
+
+async function expectUnsavedDraftDialog(page: Page) {
+  await expect(page.getByRole("dialog", { name: "Unsaved property draft" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Discard", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
 }
 
 async function submitSimulatorEnquiry(

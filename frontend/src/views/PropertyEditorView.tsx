@@ -41,6 +41,8 @@ export function PropertyEditorView({
   setMediaPathForm,
   playbookDraft,
   playbookDirty,
+  draftDirty,
+  saveBusy,
   setPlaybookDraft,
   config,
   onBack,
@@ -64,6 +66,8 @@ export function PropertyEditorView({
   setMediaPathForm: (form: MediaPathForm) => void;
   playbookDraft: PropertyPlaybookInput;
   playbookDirty: boolean;
+  draftDirty: boolean;
+  saveBusy: boolean;
   setPlaybookDraft: (draft: PropertyPlaybookInput | ((current: PropertyPlaybookInput) => PropertyPlaybookInput)) => void;
   config: RuntimeConfigValues;
   onBack: () => void;
@@ -88,13 +92,14 @@ export function PropertyEditorView({
   return (
     <section className="propertyEditorPage">
       <header className="editorHeader">
-        <button className="secondaryButton" onClick={onBack}><ChevronLeft size={18} /> Back</button>
+        <button className="secondaryButton" onClick={onBack} disabled={saveBusy}><ChevronLeft size={18} /> Back</button>
         <div>
           <h2>{property?.property_name || "New Listing"}</h2>
           <span className={classNames("badge", statusTone(form.status))}>{form.status || "draft"}</span>
+          {draftDirty && <span className="badge warning editorDraftBadge">Unsaved</span>}
         </div>
         <div className="editorHeaderActions">
-          {property && onDelete && <button className="dangerButton" onClick={onDelete}><Trash2 size={16} /> Delete</button>}
+          {property && onDelete && <button className="dangerButton" onClick={onDelete} disabled={saveBusy}><Trash2 size={16} /> Delete</button>}
         </div>
       </header>
       <div className="editorProgress"><span style={{ width: `${((currentStepIndex + 1) / EDITOR_SECTIONS.length) * 100}%` }} /></div>
@@ -102,7 +107,7 @@ export function PropertyEditorView({
         <aside className="sectionNav">
           <strong>Your progress</strong>
           {EDITOR_SECTIONS.map((item) => (
-            <button key={item.key} className={classNames(section === item.key && "active")} onClick={() => setSection(item.key)} disabled={sectionBusy}>
+            <button key={item.key} className={classNames(section === item.key && "active")} onClick={() => setSection(item.key)} disabled={sectionBusy || saveBusy}>
               <span>{item.label}</span>
               <CheckCircle2 size={15} />
             </button>
@@ -154,17 +159,17 @@ export function PropertyEditorView({
         </section>
       </div>
       <footer className="editorStickyActions">
-        <button type="button" className="secondaryButton" onClick={goBack} disabled={sectionBusy}>
+        <button type="button" className="secondaryButton" onClick={goBack} disabled={sectionBusy || saveBusy}>
           <ChevronLeft size={16} /> Back
         </button>
         <div className="editorStickyActionGroup">
           {nextSection && (
-            <button type="button" className="secondaryButton" onClick={() => setSection(nextSection)} disabled={sectionBusy}>
+            <button type="button" className="secondaryButton" onClick={() => setSection(nextSection)} disabled={sectionBusy || saveBusy}>
               Next
             </button>
           )}
-          <button type="button" className="primaryButton" onClick={onSave}>
-            <Save size={16} /> Save & Exit
+          <button type="button" className="primaryButton" onClick={onSave} disabled={saveBusy}>
+            <Save size={16} /> {saveBusy ? "Saving..." : "Save & Exit"}
           </button>
         </div>
       </footer>

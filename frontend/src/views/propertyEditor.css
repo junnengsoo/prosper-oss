@@ -27,6 +27,10 @@
   margin: 0;
 }
 
+.editorDraftBadge {
+  margin-left: 8px;
+}
+
 .editorProgress {
   height: 4px;
   flex: 0 0 auto;
