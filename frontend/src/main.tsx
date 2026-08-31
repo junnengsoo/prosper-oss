@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Phone,
   RefreshCw,
+  Save,
   UnlockKeyhole,
   UserCircle,
   X,
@@ -103,8 +104,13 @@ function App() {
   const [editorSection, setEditorSection] = useState<EditorSection>("facts");
   const [editorSectionBusy, setEditorSectionBusy] = useState(false);
   const [propertyForm, setPropertyForm] = useState<PropertyInput>({ ...EMPTY_PROPERTY_FORM });
+  const [propertyFormBaseline, setPropertyFormBaseline] = useState<PropertyInput>({ ...EMPTY_PROPERTY_FORM });
   const [propertyFormErrors, setPropertyFormErrors] = useState<Partial<Record<PropertyRequiredField, string>>>({});
   const [mediaPathForm, setMediaPathForm] = useState<MediaPathForm>({ ...EMPTY_MEDIA_PATH_FORM });
+  const [propertyDraftSaveBusy, setPropertyDraftSaveBusy] = useState(false);
+  const [draftPromptOpen, setDraftPromptOpen] = useState(false);
+  const pendingDraftNavigationRef = useRef<(() => void | Promise<void>) | null>(null);
+  const propertyDraftSaveBusyRef = useRef(false);
 
   const [playbookDraft, setPlaybookDraft] = useState<PropertyPlaybookInput>(emptyPlaybook);
   const [playbookBaseline, setPlaybookBaseline] = useState<PropertyPlaybookInput>(emptyPlaybook);
@@ -271,6 +277,7 @@ function App() {
 
   const editingPlaybookPropertyId = editingPropertyId && editingPropertyId !== "__new__" ? editingPropertyId : "";
   const playbookDirty = JSON.stringify(playbookDraft) !== JSON.stringify(playbookBaseline);
+  const propertyFactsDirty = JSON.stringify(propertyForm) !== JSON.stringify(propertyFormBaseline);
 
   useEffect(() => {
     if (!editingPlaybookPropertyId || !authReady) return;
@@ -315,6 +322,7 @@ function App() {
   const editingProperty = editingPropertyId && editingPropertyId !== "__new__" ? properties.find((property) => property.property_id === editingPropertyId) ?? null : null;
   const editingMedia = editingProperty?.media ?? [];
   const autoRepliesDirty = playbookDirty;
+  const propertyWideDraftDirty = Boolean(editingPropertyId && (propertyFactsDirty || autoRepliesDirty));
 
   const fakeConversations = conversations.filter((conversation) => conversation.source === "fake_chat");
   const selectedFakeConversation = selectedFakeConversationId ? fakeConversations.find((conversation) => conversation.id === selectedFakeConversationId) ?? null : null;
@@ -332,6 +340,16 @@ function App() {
     void api.messages(selectedFakeConversation.id).then(setFakeMessages).catch(() => setFakeMessages([]));
     void api.pipelineInspection(selectedFakeConversation.id).then(setFakeInspection).catch(() => setFakeInspection(null));
   }, [selectedFakeConversation]);
+
+  useEffect(() => {
+    if (!propertyWideDraftDirty) return;
+    const protectBrowserExit = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", protectBrowserExit);
+    return () => window.removeEventListener("beforeunload", protectBrowserExit);
+  }, [propertyWideDraftDirty]);
 
   async function runAction(action: () => Promise<void>, success?: string) {
     try {
@@ -369,20 +387,39 @@ function App() {
     setAuthReady(false);
   }
 
-  function openPropertyEditor(property: PropertyRecord) {
+  function requestProtectedDraftNavigation(action: () => void | Promise<void>) {
+    if (!propertyWideDraftDirty) {
+      void action();
+      return;
+    }
+    pendingDraftNavigationRef.current = action;
+    setDraftPromptOpen(true);
+  }
+
+  function startPropertyEditor(property: PropertyRecord) {
+    const nextForm = propertyToInput(property);
     setEditingPropertyId(property.property_id);
-    setPropertyForm(propertyToInput(property));
+    setPropertyForm(nextForm);
+    setPropertyFormBaseline(nextForm);
     setPropertyFormErrors({});
     setEditorSection("facts");
+    loadedPlaybookPropertyIdRef.current = "";
     setActiveView("properties");
   }
 
+  function openPropertyEditor(property: PropertyRecord) {
+    requestProtectedDraftNavigation(() => startPropertyEditor(property));
+  }
+
   function openNewPropertyEditor() {
+    const nextPlaybook = defaultPlaybookInput();
     setEditingPropertyId("__new__");
     setPropertyForm({ ...EMPTY_PROPERTY_FORM });
+    setPropertyFormBaseline({ ...EMPTY_PROPERTY_FORM });
     setPropertyFormErrors({});
-    setPlaybookDraft(defaultPlaybookInput());
-    setPlaybookBaseline(defaultPlaybookInput());
+    setPlaybookDraft(nextPlaybook);
+    setPlaybookBaseline(nextPlaybook);
+    loadedPlaybookPropertyIdRef.current = "";
     setEditorSection("facts");
     setActiveView("properties");
   }
@@ -410,14 +447,16 @@ function App() {
     const saved = await api.upsertProperty(payload);
     setPropertyFormErrors({});
     setEditingPropertyId(saved.property_id);
-    setPropertyForm(propertyToInput(saved));
+    const savedForm = propertyToInput(saved);
+    setPropertyForm(savedForm);
+    setPropertyFormBaseline(savedForm);
     await loadAll();
     return saved;
   }
 
   async function changeEditorSection(nextSection: EditorSection) {
     if (nextSection === editorSection || editorSectionBusy) return;
-    if (editorSection === "facts" && nextSection !== "facts") {
+    if (editingPropertyId === "__new__" && nextSection !== "facts") {
       setEditorSectionBusy(true);
       setStatus("Saving listing facts");
       try {
@@ -430,14 +469,85 @@ function App() {
       } finally {
         setEditorSectionBusy(false);
       }
+      setEditorSection(nextSection);
+      return;
+    }
+    if ((editorSection === "facts" || editorSection === "auto_replies") && (nextSection === "facts" || nextSection === "auto_replies")) {
+      setEditorSection(nextSection);
+      return;
+    }
+    if (nextSection === "gallery" && propertyWideDraftDirty) {
+      requestProtectedDraftNavigation(() => setEditorSection(nextSection));
+      return;
     }
     setEditorSection(nextSection);
   }
 
+  async function savePropertyWideDraft(): Promise<string | null> {
+    if (!editingPropertyId || propertyDraftSaveBusyRef.current) return null;
+    propertyDraftSaveBusyRef.current = true;
+    setPropertyDraftSaveBusy(true);
+    try {
+      let propertyId = editingPropertyId === "__new__" ? "" : editingPropertyId;
+      if (editingPropertyId === "__new__" || propertyFactsDirty) {
+        const saved = await saveProperty();
+        propertyId = saved.property_id;
+      }
+      if (!propertyId) throw new Error("Save the property before saving Auto Replies");
+      if (autoRepliesDirty) await saveAutoRepliesForProperty(propertyId);
+      return propertyId;
+    } finally {
+      propertyDraftSaveBusyRef.current = false;
+      setPropertyDraftSaveBusy(false);
+    }
+  }
+
   async function savePropertyAndExit() {
-    const saved = await saveProperty();
-    if (autoRepliesDirty) await saveAutoRepliesForProperty(saved.property_id);
+    const savedPropertyId = await savePropertyWideDraft();
+    if (!savedPropertyId) return;
     setEditingPropertyId(null);
+  }
+
+  function discardPropertyWideDraft() {
+    setPropertyForm(propertyFormBaseline);
+    setPropertyFormErrors({});
+    setPlaybookDraft(playbookBaseline);
+  }
+
+  async function saveAndCompleteDraftNavigation() {
+    const action = pendingDraftNavigationRef.current;
+    try {
+      const savedPropertyId = await savePropertyWideDraft();
+      if (!savedPropertyId) return;
+      setDraftPromptOpen(false);
+      pendingDraftNavigationRef.current = null;
+      await action?.();
+    } catch (error) {
+      setDraftPromptOpen(false);
+      pendingDraftNavigationRef.current = null;
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function discardAndCompleteDraftNavigation() {
+    const action = pendingDraftNavigationRef.current;
+    discardPropertyWideDraft();
+    setDraftPromptOpen(false);
+    pendingDraftNavigationRef.current = null;
+    await action?.();
+  }
+
+  function cancelDraftNavigation() {
+    setDraftPromptOpen(false);
+    pendingDraftNavigationRef.current = null;
+  }
+
+  function navigateToView(view: AppView) {
+    if (view === activeView && !(view === "properties" && editingPropertyId)) return;
+    requestProtectedDraftNavigation(() => {
+      setEditingPropertyId(null);
+      setActiveView(view);
+    });
   }
 
   function confirmPropertyDelete(propertyIds: string[]): boolean {
@@ -565,7 +675,7 @@ function App() {
 
   return (
     <main className="appFrame">
-      <Sidebar activeView={activeView} setActiveView={setActiveView} />
+      <Sidebar activeView={activeView} setActiveView={navigateToView} />
       <section className="appContentFrame">
         <TopBar
           activeView={activeView}
@@ -575,8 +685,16 @@ function App() {
           currentUser={currentUser}
           onOpenWhatsappConnection={() => setWhatsappPanelOpen(true)}
           onToggleSendLock={() => runAction(() => toggleConfig("send_lock"))}
-          onLogout={currentUser ? logout : undefined}
+          onLogout={currentUser ? () => requestProtectedDraftNavigation(logout) : undefined}
         />
+        {draftPromptOpen && (
+          <DraftNavigationModal
+            busy={propertyDraftSaveBusy}
+            onSave={() => void saveAndCompleteDraftNavigation()}
+            onDiscard={() => void discardAndCompleteDraftNavigation()}
+            onCancel={cancelDraftNavigation}
+          />
+        )}
         {whatsappPanelOpen && (
           <WhatsappConnectionModal
             connection={whatsappConnection}
@@ -640,9 +758,11 @@ function App() {
             setMediaPathForm={setMediaPathForm}
             playbookDraft={playbookDraft}
             playbookDirty={autoRepliesDirty}
+            draftDirty={propertyWideDraftDirty}
+            saveBusy={propertyDraftSaveBusy}
             setPlaybookDraft={setPlaybookDraft}
             config={config}
-            onBack={() => setEditingPropertyId(null)}
+            onBack={() => requestProtectedDraftNavigation(() => setEditingPropertyId(null))}
             onSave={() => runAction(savePropertyAndExit, "Property saved")}
             onDelete={editingProperty ? () => runAction(() => deleteSelectedProperties([editingProperty.property_id]), "Property deleted") : undefined}
             onAddMediaPath={() => runAction(addMediaPath, "Gallery item added")}
@@ -772,6 +892,40 @@ function TopBar({
         )}
       </div>
     </header>
+  );
+}
+
+function DraftNavigationModal({
+  busy,
+  onSave,
+  onDiscard,
+  onCancel,
+}: {
+  busy: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label="Unsaved property draft">
+      <section className="draftGuardModal">
+        <header>
+          <div>
+            <h2>Unsaved property draft</h2>
+            <p>Save changes to Listing Facts and Auto Replies before leaving?</p>
+          </div>
+          <button className="iconButton" onClick={onCancel} aria-label="Close draft dialog" disabled={busy}><X size={18} /></button>
+        </header>
+        <div className="draftGuardActions">
+          <button className="secondaryButton" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className="dangerButton" type="button" onClick={onDiscard} disabled={busy}>Discard</button>
+          <button className="primaryButton" type="button" onClick={onSave} disabled={busy}>
+            {busy ? <Clock size={16} /> : <Save size={16} />}
+            Save
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 

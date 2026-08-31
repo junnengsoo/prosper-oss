@@ -260,6 +260,39 @@ textarea {
   box-shadow: 0 20px 60px rgba(10, 20, 28, 0.24);
 }
 
+.draftGuardModal {
+  width: min(480px, calc(100vw - 48px));
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(10, 20, 28, 0.24);
+}
+
+.draftGuardModal header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.draftGuardModal h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.draftGuardModal p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.draftGuardActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+}
+
 .connectionModal header {
   display: flex;
   justify-content: space-between;
