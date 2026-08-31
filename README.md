@@ -155,19 +155,19 @@ The backup archive is written under `runtime/backups` by default and includes a 
 Restore a verified Prosper backup only after stopping local services:
 
 ```bash
-.venv/bin/python -m app.cli restore runtime/backups/prosper-backup-example.tar.gz
+.venv/bin/python -m app.cli restore runtime/backups/prosper-backup-example.tar.gz --confirm-restore
 ```
 
-Restore validates the archive before replacing current data, keeps a rollback snapshot under `runtime/restore-rollbacks`, and reports that WhatsApp pairing credentials are not included, so re-pairing may be required.
+Restore validates the archive before replacing current data, refuses to run while local Prosper services appear active, keeps a rollback snapshot under `runtime/restore-rollbacks`, and reports that WhatsApp pairing credentials are not included, so re-pairing may be required. Omit `--confirm-restore` for an interactive confirmation prompt.
 
 Cleanup remains an explicit operator action. Remove selected operational data or selected backup archives with:
 
 ```bash
-.venv/bin/python -m app.cli cleanup-data --database --media
-.venv/bin/python -m app.cli cleanup-backups prosper-backup-example.tar.gz
+.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup
+.venv/bin/python -m app.cli cleanup-backups prosper-backup-example.tar.gz --confirm-cleanup
 ```
 
-Prosper does not automatically delete backups or runtime data.
+Omit `--confirm-cleanup` for an interactive confirmation prompt. Prosper does not automatically delete backups or runtime data.
 
 The simulator also has a scoped reset for fake chat data:
 
