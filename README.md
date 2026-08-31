@@ -150,7 +150,24 @@ Create a verified backup of the active SQLite database and managed property medi
 .venv/bin/python -m app.cli backup
 ```
 
-The backup archive is written under `runtime/backups` by default and includes a manifest with file sizes and checksums. It does not include environment files, bridge authentication state, logs, caches, build output, or previous backups. Restore, migration, cleanup, and managed retention workflows remain out of scope.
+The backup archive is written under `runtime/backups` by default and includes a manifest with file sizes and checksums. It does not include environment files, bridge authentication state, logs, caches, build output, or previous backups. In-place migrations, scheduled backups, and managed retention workflows remain out of scope.
+
+Restore a verified Prosper backup only after stopping local services:
+
+```bash
+.venv/bin/python -m app.cli restore runtime/backups/prosper-backup-example.tar.gz --confirm-restore
+```
+
+Restore validates the archive before replacing current data, refuses to run while local Prosper services appear active, keeps a rollback snapshot under `runtime/restore-rollbacks`, and reports that WhatsApp pairing credentials are not included, so re-pairing may be required. Omit `--confirm-restore` for an interactive confirmation prompt.
+
+Cleanup remains an explicit operator action. Remove selected operational data or selected backup archives with:
+
+```bash
+.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup
+.venv/bin/python -m app.cli cleanup-backups prosper-backup-example.tar.gz --confirm-cleanup
+```
+
+Omit `--confirm-cleanup` for an interactive confirmation prompt. Prosper does not automatically delete backups or runtime data.
 
 The simulator also has a scoped reset for fake chat data:
 
@@ -196,7 +213,7 @@ The current experimental scope deliberately excludes:
 - provider-neutral model routing or multi-provider parity;
 - durable job queues, lease ownership, transactional outbox processing, and channel idempotency keys;
 - a general-purpose identity system or multi-user roles;
-- hosted object storage, migration management, backup/restore operations, and managed retention policies;
+- hosted object storage, migration management, scheduled backups, and managed retention policies;
 - an official WhatsApp Business Platform integration.
 
 These are future engineering directions, not hidden requirements for this release.

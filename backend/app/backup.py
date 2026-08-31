@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import socket
 import sqlite3
 import tarfile
 import tempfile
@@ -18,6 +21,10 @@ from .config import RUNTIME_DIR, ROOT_DIR, get_settings
 MANIFEST_VERSION = 1
 DATABASE_ARCHIVE_PATH = "database/prosper.sqlite3"
 MANIFEST_ARCHIVE_PATH = "manifest.json"
+DEFAULT_SERVICE_CHECK_PORTS = (8000, 5173, 8788)
+ROLLBACKS_DIRNAME = "restore-rollbacks"
+MANAGED_MEDIA_ARCHIVE_ROOT = "media/properties"
+MANAGED_MEDIA_DIRNAME = "properties"
 EXCLUDED_MEDIA_ROOT_PARTS = {
     ".cache",
     "__pycache__",
@@ -53,6 +60,18 @@ EXCLUDED_MEDIA_NAME_FRAGMENTS = (
 class BackupResult:
     archive_path: Path
     manifest: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RestoreResult:
+    archive_path: Path
+    rollback_path: Path
+    manifest: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class CleanupResult:
+    removed_paths: list[Path]
 
 
 def create_backup(output_dir: Path | None = None, *, name: str | None = None) -> BackupResult:
@@ -124,11 +143,12 @@ def verify_backup(archive_path: Path) -> dict[str, Any]:
     with tarfile.open(archive_path, "r:gz") as archive:
         members = archive.getmembers()
         _validate_archive_members(members)
-        manifest_member = archive.getmember(MANIFEST_ARCHIVE_PATH)
+        manifest_member = _archive_member(archive, MANIFEST_ARCHIVE_PATH)
         manifest_file = archive.extractfile(manifest_member)
         if manifest_file is None:
             raise ValueError("Backup manifest is not readable")
         manifest = json.loads(manifest_file.read().decode("utf-8"))
+        _validate_manifest(manifest)
 
         expected_files = {entry["archive_path"]: entry for entry in manifest.get("files", [])}
         regular_members = {member.name for member in members if member.isfile()}
@@ -136,7 +156,7 @@ def verify_backup(archive_path: Path) -> dict[str, Any]:
             raise ValueError("Backup archive contents do not match manifest inventory")
 
         for archive_name, entry in expected_files.items():
-            member = archive.getmember(archive_name)
+            member = _archive_member(archive, archive_name)
             extracted = archive.extractfile(member)
             if extracted is None:
                 raise ValueError(f"Backup file is not readable: {archive_name}")
@@ -147,7 +167,7 @@ def verify_backup(archive_path: Path) -> dict[str, Any]:
             if checksum != entry["sha256"]:
                 raise ValueError(f"Backup file checksum mismatch: {archive_name}")
 
-        database_member = archive.getmember(DATABASE_ARCHIVE_PATH)
+        database_member = _archive_member(archive, DATABASE_ARCHIVE_PATH)
         database_file = archive.extractfile(database_member)
         if database_file is None:
             raise ValueError("Backup database snapshot is not readable")
@@ -157,6 +177,91 @@ def verify_backup(archive_path: Path) -> dict[str, Any]:
             _assert_sqlite_integrity(database_path)
 
         return manifest
+
+
+def restore_backup(archive_path: Path, *, confirmed: bool = False) -> RestoreResult:
+    source_archive = archive_path.expanduser().resolve()
+    manifest = verify_backup(source_archive)
+    active_services = active_prosper_services()
+    if active_services:
+        raise RuntimeError(f"Prosper services appear active: {', '.join(active_services)}. Stop them before restoring.")
+    if not confirmed:
+        raise PermissionError("Restore requires explicit confirmation.")
+
+    settings = get_settings()
+    database_path = _sqlite_database_path(settings.database_url)
+    media_root = settings.media_root.expanduser().resolve()
+
+    with tempfile.TemporaryDirectory(prefix="prosper-restore-") as temporary_root:
+        extracted_root = Path(temporary_root) / "extracted"
+        _extract_verified_backup(source_archive, manifest, extracted_root)
+        rollback_path = _create_rollback_snapshot(database_path, media_root)
+        try:
+            _activate_restore(extracted_root, database_path, media_root)
+        except Exception:
+            _restore_rollback_snapshot(rollback_path, database_path, media_root)
+            raise
+
+    return RestoreResult(archive_path=source_archive, rollback_path=rollback_path, manifest=manifest)
+
+
+def cleanup_operational_data(*, remove_database: bool, remove_media: bool, confirmed: bool = False) -> CleanupResult:
+    if not confirmed:
+        raise PermissionError("Cleanup requires explicit confirmation.")
+    if not remove_database and not remove_media:
+        raise ValueError("Select at least one cleanup target.")
+    active_services = active_prosper_services()
+    if active_services:
+        raise RuntimeError(f"Prosper services appear active: {', '.join(active_services)}. Stop them before cleanup.")
+
+    settings = get_settings()
+    removed: list[Path] = []
+    if remove_database:
+        database_path = _sqlite_database_path(settings.database_url)
+        for path in _sqlite_database_files(database_path):
+            if path.exists():
+                path.unlink()
+                removed.append(path)
+
+    if remove_media:
+        managed_media = settings.media_root.expanduser().resolve() / MANAGED_MEDIA_DIRNAME
+        if managed_media.exists():
+            shutil.rmtree(managed_media)
+            removed.append(managed_media)
+
+    return CleanupResult(removed_paths=removed)
+
+
+def cleanup_backup_archives(
+    archive_names: list[str],
+    *,
+    backup_dir: Path | None = None,
+    confirmed: bool = False,
+) -> CleanupResult:
+    if not confirmed:
+        raise PermissionError("Cleanup requires explicit confirmation.")
+    if not archive_names:
+        raise ValueError("Select at least one backup archive to remove.")
+
+    resolved_backup_dir = (backup_dir or (RUNTIME_DIR / "backups")).expanduser().resolve()
+    removed: list[Path] = []
+    for archive_name in archive_names:
+        archive_path = _backup_archive_cleanup_path(archive_name, resolved_backup_dir)
+        if not archive_path.is_file():
+            raise FileNotFoundError(f"Backup archive not found: {archive_path}")
+        archive_path.unlink()
+        removed.append(archive_path)
+    return CleanupResult(removed_paths=removed)
+
+
+def active_prosper_services() -> list[str]:
+    active: list[str] = []
+    for port in _service_check_ports():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.2)
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                active.append(f"127.0.0.1:{port}")
+    return active
 
 
 def _sqlite_database_path(database_url: str) -> Path:
@@ -345,6 +450,44 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_manifest(manifest: Any) -> None:
+    if not isinstance(manifest, dict):
+        raise ValueError("Backup manifest is invalid")
+    if manifest.get("manifest_version") != MANIFEST_VERSION:
+        raise ValueError("Backup manifest version is unsupported")
+    if manifest.get("backup_type") != "prosper_backup":
+        raise ValueError("Backup archive type is unsupported")
+    database = manifest.get("database")
+    if not isinstance(database, dict) or database.get("archive_path") != DATABASE_ARCHIVE_PATH:
+        raise ValueError("Backup manifest database entry is invalid")
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError("Backup manifest file inventory is invalid")
+    seen_paths: set[str] = set()
+    for entry in files:
+        if not isinstance(entry, dict):
+            raise ValueError("Backup manifest file inventory is invalid")
+        archive_path = entry.get("archive_path")
+        role = entry.get("role")
+        size_bytes = entry.get("size_bytes")
+        sha256 = entry.get("sha256")
+        if not isinstance(archive_path, str) or not archive_path:
+            raise ValueError("Backup manifest file path is invalid")
+        if archive_path in seen_paths:
+            raise ValueError("Backup manifest file inventory has duplicate paths")
+        seen_paths.add(archive_path)
+        if Path(archive_path).is_absolute() or ".." in Path(archive_path).parts:
+            raise ValueError(f"Unsafe backup manifest file path: {archive_path}")
+        if not isinstance(role, str) or not role:
+            raise ValueError("Backup manifest file role is invalid")
+        if not isinstance(size_bytes, int) or size_bytes < 0:
+            raise ValueError(f"Backup manifest file size is invalid: {archive_path}")
+        if not isinstance(sha256, str) or len(sha256) != 64:
+            raise ValueError(f"Backup manifest file checksum is invalid: {archive_path}")
+    if DATABASE_ARCHIVE_PATH not in seen_paths:
+        raise ValueError("Backup manifest is missing the SQLite database")
+
+
 def _validate_archive_members(members: list[tarfile.TarInfo]) -> None:
     for member in members:
         path = Path(member.name)
@@ -359,3 +502,123 @@ def _assert_sqlite_integrity(database_path: Path) -> None:
         result = connection.execute("PRAGMA integrity_check").fetchone()
     if result is None or result[0] != "ok":
         raise ValueError("Backup SQLite snapshot failed integrity_check")
+
+
+def _archive_member(archive: tarfile.TarFile, name: str) -> tarfile.TarInfo:
+    try:
+        return archive.getmember(name)
+    except KeyError as error:
+        raise ValueError(f"Backup archive is missing required file: {name}") from error
+
+
+def _extract_verified_backup(archive_path: Path, manifest: dict[str, Any], destination: Path) -> None:
+    destination.mkdir(parents=True)
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for entry in manifest["files"]:
+            archive_name = entry["archive_path"]
+            member = _archive_member(archive, archive_name)
+            source = archive.extractfile(member)
+            if source is None:
+                raise ValueError(f"Backup file is not readable: {archive_name}")
+            target = destination / archive_name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+
+
+def _create_rollback_snapshot(database_path: Path, media_root: Path) -> Path:
+    rollback_root = database_path.parent / ROLLBACKS_DIRNAME / f"prosper-rollback-{_utc_stamp()}"
+    database_snapshot_dir = rollback_root / "database"
+    media_snapshot_dir = rollback_root / "media"
+    database_snapshot_dir.mkdir(parents=True, exist_ok=False)
+    media_snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    for path in _sqlite_database_files(database_path):
+        if path.exists():
+            shutil.copy2(path, database_snapshot_dir / path.name)
+
+    managed_media = media_root / MANAGED_MEDIA_DIRNAME
+    if managed_media.exists():
+        shutil.copytree(managed_media, media_snapshot_dir / MANAGED_MEDIA_DIRNAME, symlinks=False)
+    return rollback_root
+
+
+def _activate_restore(extracted_root: Path, database_path: Path, media_root: Path) -> None:
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    staged_database = database_path.with_name(f".{database_path.name}.restore-{_utc_stamp()}")
+    shutil.copy2(extracted_root / DATABASE_ARCHIVE_PATH, staged_database)
+    for sidecar in _sqlite_database_files(database_path)[1:]:
+        sidecar.unlink(missing_ok=True)
+    staged_database.replace(database_path)
+
+    media_root.mkdir(parents=True, exist_ok=True)
+    staged_media = media_root / f".{MANAGED_MEDIA_DIRNAME}.restore-{_utc_stamp()}"
+    source_media = extracted_root / MANAGED_MEDIA_ARCHIVE_ROOT
+    if source_media.exists():
+        shutil.copytree(source_media, staged_media, symlinks=False)
+    else:
+        staged_media.mkdir()
+
+    managed_media = media_root / MANAGED_MEDIA_DIRNAME
+    replaced_media = media_root / f".{MANAGED_MEDIA_DIRNAME}.replaced-{_utc_stamp()}"
+    if managed_media.exists():
+        managed_media.replace(replaced_media)
+    staged_media.replace(managed_media)
+    if replaced_media.exists():
+        shutil.rmtree(replaced_media)
+
+
+def _restore_rollback_snapshot(rollback_path: Path, database_path: Path, media_root: Path) -> None:
+    for path in _sqlite_database_files(database_path):
+        path.unlink(missing_ok=True)
+        rollback_file = rollback_path / "database" / path.name
+        if rollback_file.exists():
+            shutil.copy2(rollback_file, path)
+
+    managed_media = media_root / MANAGED_MEDIA_DIRNAME
+    if managed_media.exists():
+        shutil.rmtree(managed_media)
+    rollback_media = rollback_path / "media" / MANAGED_MEDIA_DIRNAME
+    if rollback_media.exists():
+        shutil.copytree(rollback_media, managed_media, symlinks=False)
+
+
+def _sqlite_database_files(database_path: Path) -> list[Path]:
+    return [
+        database_path,
+        database_path.with_name(f"{database_path.name}-wal"),
+        database_path.with_name(f"{database_path.name}-shm"),
+    ]
+
+
+def _service_check_ports() -> list[int]:
+    raw_ports = os.environ.get("PROSPER_RESTORE_SERVICE_PORTS")
+    if raw_ports is None:
+        return list(DEFAULT_SERVICE_CHECK_PORTS)
+    if not raw_ports.strip():
+        return []
+    ports: list[int] = []
+    for raw_port in raw_ports.split(","):
+        port = raw_port.strip()
+        if not port:
+            continue
+        ports.append(int(port))
+    return ports
+
+
+def _backup_archive_cleanup_path(archive_name: str, backup_dir: Path) -> Path:
+    candidate = Path(archive_name).expanduser()
+    if not candidate.is_absolute():
+        candidate = backup_dir / candidate
+    candidate = candidate.resolve()
+    try:
+        candidate.relative_to(backup_dir)
+    except ValueError as error:
+        raise ValueError("Backup cleanup paths must stay inside the selected backup directory") from error
+    if candidate.suffixes[-2:] != [".tar", ".gz"]:
+        raise ValueError("Backup cleanup only removes .tar.gz archives")
+    return candidate
+
+
+def _utc_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ%f")

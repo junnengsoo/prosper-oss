@@ -21,7 +21,7 @@ This inventory records the final public-review wording decisions behind Prosper'
 
 ## Deferred
 
-- Managed operations: durable queues, leases, channel idempotency keys, restore workflows, migrations, managed retention, and hosted media storage are deferred until there is an operational target.
+- Managed operations: durable queues, leases, channel idempotency keys, migrations, scheduled backups, managed retention, and hosted media storage are deferred until there is an operational target.
 - Broader product scope: sale enquiries, screening, qualification forms, transaction automation, and post-match workflows are deferred to keep Prosper focused on inbound rental enquiries.
 - Provider-neutral model routing: multi-provider parity is deferred because the current quality and contract checks are DeepSeek-specific.
 - Multi-user identity and roles: user databases, roles, and team permissions are deferred because they would add security surface without helping the current local review path.

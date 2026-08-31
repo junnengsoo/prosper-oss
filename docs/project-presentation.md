@@ -34,7 +34,7 @@ The Simulator Conversation is the local walkthrough path because it exercises th
 
 ## Tradeoffs
 
-Prosper keeps the local workflow complete enough to inspect end to end, while avoiding infrastructure that would imply a managed service. Reset-only SQLite, local media, a single-user password, and synchronous request handling are enough for review but are not substitutes for migrations, backups, team identity, durable jobs, or managed retention.
+Prosper keeps the local workflow complete enough to inspect end to end, while avoiding infrastructure that would imply a managed service. Reset-only SQLite, local media, a single-user password, and synchronous request handling are enough for review but are not substitutes for migrations, scheduled backups, team identity, durable jobs, or managed retention.
 
 The project keeps DeepSeek as the explicit live provider so prompts, schema contracts, and evals can stay concrete. Provider-neutral routing is deferred until there is a real compatibility target.
 
