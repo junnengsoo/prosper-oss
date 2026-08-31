@@ -4,7 +4,7 @@ This inventory records the final public-review wording decisions behind Prosper'
 
 ## Kept
 
-- Local-first review path: The Simulator Conversation, reset-only SQLite storage, seeded Rental Listings, and local media directory stay because they make the workflow reproducible without external channel setup.
+- Local-first review path: The Simulator Conversation, local SQLite storage, seeded Rental Listings, verified backups, and local media directory stay because they make the workflow reproducible without external channel setup.
 - DeepSeek-backed model stages: DeepSeek remains the sole named live provider because the prompts, schemas, and evals are written around that contract. Missing credentials fall back to Manual Review so setup still succeeds.
 - Stage Runs as the audit story: Local stage records stay because they expose inputs, outputs, statuses, and errors at the workflow level without requiring external tracing.
 - Deterministic Playbook / Auto Replies: Final tenant-facing replies are rendered from configured Playbook blocks after validated model output, keeping the last action predictable.
@@ -21,7 +21,7 @@ This inventory records the final public-review wording decisions behind Prosper'
 
 ## Deferred
 
-- Managed operations: durable queues, leases, channel idempotency keys, backups, migrations, managed retention, and hosted media storage are deferred until there is an operational target.
+- Managed operations: durable queues, leases, channel idempotency keys, restore workflows, migrations, managed retention, and hosted media storage are deferred until there is an operational target.
 - Broader product scope: sale enquiries, screening, qualification forms, transaction automation, and post-match workflows are deferred to keep Prosper focused on inbound rental enquiries.
 - Provider-neutral model routing: multi-provider parity is deferred because the current quality and contract checks are DeepSeek-specific.
 - Multi-user identity and roles: user databases, roles, and team permissions are deferred because they would add security surface without helping the current local review path.

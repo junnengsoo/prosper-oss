@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 
 from sqlalchemy import select
 
+from .backup import create_backup
 from .database.connection import SessionLocal, init_db
 from .database.models import PropertyPlaybook
 from .database.seed import DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS, seed_all, seed_property_playbooks
@@ -24,6 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     subcommands.add_parser("init-db", help="Initialize the database and seed sample data")
     subcommands.add_parser("show-config", help="Show application config")
+
+    backup = subcommands.add_parser("backup", help="Create a verified backup archive")
+    backup.add_argument("--output-dir", type=Path, help="Directory for the completed backup archive")
+    backup.add_argument("--name", help="Archive file name; .tar.gz is added when omitted")
 
     set_config = subcommands.add_parser("set-config", help="Set one or more application config values")
     set_config.add_argument("pairs", nargs="+", help="Config updates as key=value")
@@ -59,6 +65,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.command in {None, "init-db"}:
         init_database()
+        return
+    if args.command == "backup":
+        result = create_backup(args.output_dir, name=args.name)
+        print(f"Created verified Prosper backup: {result.archive_path}")
         return
 
     init_db()
