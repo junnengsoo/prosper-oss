@@ -1,6 +1,6 @@
 # Reliability Notes
 
-Prosper uses explicit controls around model-backed rental-enquiry work. See the [Domain Glossary](domain-glossary.md) for shared terms and [ADR 0001](adr/0001-public-reference-boundaries.md) for the public release boundary.
+Prosper uses explicit controls around model-backed rental-enquiry work in a single-operator local pilot. WhatsApp remains the visible channel transcript, while Prosper stores local workflow state and operational evidence in SQLite. See the [Domain Glossary](domain-glossary.md) for shared terms and [ADR 0001](adr/0001-public-reference-boundaries.md) for the public release boundary.
 
 ## Duplicate and Replay Safety
 
@@ -34,13 +34,13 @@ Run `.venv/bin/python -m app.cli doctor --strict-runtime` after starting the loc
 
 The doctor never prints secret values. It reports whether DeepSeek and bridge-token settings are present or unsafe without echoing the configured values. Prosper currently does not include schema migrations; the doctor says this plainly and checks the current SQLite table shape directly.
 
-The local CLI can create a verified backup of the active SQLite database and managed property media with `.venv/bin/python -m app.cli backup`. The archive is self-describing through a manifest and intentionally excludes environment files, bridge authentication state, logs, caches, build output, and previous backups. Restore is available with `.venv/bin/python -m app.cli restore <archive> --confirm-restore` after stopping local services; the command validates the archive first, refuses active services, preserves a rollback snapshot, and warns that WhatsApp re-pairing may be required. Without `--confirm-restore`, restore requires typing `RESTORE` interactively.
+The local CLI can create a verified backup of the active SQLite database and managed property media with `.venv/bin/python -m app.cli backup`. The archive is self-describing through a manifest and can include tenant messages, Conversation state, Stage Run context, model inputs and outputs, action records, media metadata, and managed property media. It intentionally excludes environment files, bridge authentication state, logs, caches, build output, and previous backups. Restore is available with `.venv/bin/python -m app.cli restore <archive> --confirm-restore` after stopping local services; the command validates the archive first, refuses active services, preserves a rollback snapshot, and warns that WhatsApp re-pairing may be required. Without `--confirm-restore`, restore requires typing `RESTORE` interactively.
 
 ## Privacy and Retention
 
-The default `.env.example` keeps SQLite data under `runtime/prosper.sqlite3`. Local audit records can contain inbound message text, listing details, model input snapshots, model outputs, errors, and outbound action records. DeepSeek-backed runs send prompt input to the configured DeepSeek-compatible endpoint.
+The default `.env.example` keeps SQLite data under `runtime/prosper.sqlite3`. Local audit records can contain tenant message text, listing details, Stage Run context, model input snapshots, model outputs, errors, and outbound action records. DeepSeek-backed runs send prompt input, including tenant messages and Stage Run context, to the configured DeepSeek-compatible endpoint.
 
-SQLite remains local storage for this release. Prosper currently does not include schema migrations. Existing local databases are still resettable; stop the services and use `.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup` for explicit data cleanup, or remove the relevant `runtime/*.sqlite3` files and rerun `.venv/bin/python -m app.cli init-db` to rebuild seeded local data. Cleanup commands require `--confirm-cleanup` or typing `CLEANUP` interactively. In-place migrations, scheduled backups, and managed retention policies are deferred.
+SQLite remains Prosper's local application and middleman store for this release. Prosper currently does not include schema migrations. Existing local databases are still resettable; stop the services and use `.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup` for explicit data cleanup, or remove the relevant `runtime/*.sqlite3` files and rerun `.venv/bin/python -m app.cli init-db` to rebuild seeded local data. Cleanup commands require `--confirm-cleanup` or typing `CLEANUP` interactively. In-place migrations, scheduled backups, and automatic retention deletion are not implemented.
 
 ## Dashboard Authentication
 
@@ -48,4 +48,4 @@ The dashboard uses a signed, expiring `HttpOnly` cookie for its single-user sess
 
 ## Known Boundary
 
-The local reference implementation is SQLite-first and uses synchronous request handling around the pipeline. A high-volume deployment would need durable background jobs, explicit lease/lock ownership, durable outbound processing, managed storage retention, and stronger operational tracing before scaling message throughput.
+The local pilot is SQLite-first and uses synchronous request handling around the pipeline. A high-volume deployment would need durable background jobs, explicit lease/lock ownership, durable outbound processing, managed storage cleanup, and stronger operational tracing before scaling message throughput.

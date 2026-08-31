@@ -21,7 +21,7 @@ def assert_contains_all(text: str, phrases: list[str]):
 def test_readme_uses_experimental_single_user_positioning_without_release_overclaiming():
     lowered = README.lower()
 
-    assert "experimental whatsapp rental-enquiry app" in lowered
+    assert "experimental, single-operator whatsapp rental-enquiry workflow orchestrator" in lowered
     assert "single-user workflow" in lowered
     assert "open-source" not in lowered
     assert "open source" not in lowered
@@ -139,9 +139,10 @@ def test_readme_documents_manual_walkthrough_and_release_boundaries():
 
 
 def test_public_docs_treat_whatsapp_as_the_primary_channel():
-    assert "WhatsApp rental-enquiry app" in README
+    assert "WhatsApp rental-enquiry workflow orchestrator" in README
     assert "Authenticated WhatsApp Bridge connectivity through Baileys" in README
     assert "The primary channel is WhatsApp" in README
+    assert "WhatsApp remains the visible channel transcript" in README
 
     banned_phrases = [
         "optional WhatsApp adapter",
@@ -163,8 +164,8 @@ def test_schema_boundary_docs_explain_local_sqlite_production_boundaries():
         [
             "Prosper uses local SQLite for this experimental repo",
             "disposable local testing data",
-            "not production storage",
-            "production deployment would need a deliberate database redesign",
+            "single-operator pilot state",
+            "not managed service storage",
             "schema changes are handled by resetting the local database",
             "string listing identifiers",
             "`property_type` field stays",
@@ -173,6 +174,8 @@ def test_schema_boundary_docs_explain_local_sqlite_production_boundaries():
             "Latest-message display state is derived from Messages",
             "`conversation_id` is nullable",
             "full input snapshots",
+            "included in verified backups",
+            "sent to DeepSeek-backed endpoints",
             "raw-type marker records source event provenance",
             "internal outbound action markers",
             "only keys explicitly allowed by the backend contract may be written",
@@ -185,6 +188,11 @@ def test_domain_glossary_explains_clean_schema_terms():
     assert_contains_all(
         DOMAIN_GLOSSARY,
         [
+            "stateful workflow orchestrator",
+            "Prosper owns Rental Listing configuration",
+            "local SQLite as its application and middleman store",
+            "WhatsApp remains the visible channel transcript",
+            "Prosper is not the tenant-visible chat transcript",
             "string Rental Listing ID",
             "rental-focused in this release",
             "listing `property_type` field is retained as intentional extensibility",
@@ -206,3 +214,36 @@ def test_domain_glossary_explains_clean_schema_terms():
             "Unknown config keys are rejected",
         ],
     )
+
+
+def test_public_docs_align_real_data_pilot_boundaries():
+    public_doc_text = "\n".join(path.read_text() for path in PUBLIC_DOCS)
+
+    assert_contains_all(
+        public_doc_text,
+        [
+            "tenant messages",
+            "Stage Run context",
+            "may be stored locally",
+            "can include tenant messages, Conversation state, Stage Run context",
+            "DeepSeek-backed runs send prompt inputs, including tenant messages and Stage Run context",
+            "Prosper currently does not include schema migrations",
+            "Restore does not include WhatsApp pairing credentials",
+            "re-pairing may be required",
+            "automatic retention deletion",
+        ],
+    )
+
+    banned_phrases = [
+        "Postgres",
+        "PostgreSQL",
+        "postgres",
+        "Alembic",
+        "alembic",
+        "automatic migrations",
+        "configuration export/import",
+    ]
+    for path in PUBLIC_DOCS:
+        text = path.read_text()
+        for phrase in banned_phrases:
+            assert phrase not in text, f"{path.relative_to(ROOT_DIR)} contains {phrase!r}"

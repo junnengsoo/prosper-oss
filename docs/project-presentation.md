@@ -1,8 +1,8 @@
 # Project Briefing
 
-Prosper is a local-first WhatsApp rental-enquiry reference implementation. It shows how an AI-assisted property workflow can accept inbound tenant messages, classify intent, match configured Rental Listings, render deterministic Playbook replies, and preserve local audit records.
+Prosper is a local-first, single-operator WhatsApp rental-enquiry workflow orchestrator. It shows how an AI-assisted property workflow can accept inbound tenant messages, classify intent, match configured Rental Listings, render deterministic Playbook replies, and preserve local audit records.
 
-The supported scope is intentionally narrow: inbound WhatsApp rental enquiries, one operator dashboard, resettable SQLite storage, DeepSeek-backed Pipeline stages, Stage Runs for auditability, and an authenticated WhatsApp Bridge. The [Tradeoff Inventory](tradeoff-inventory.md) summarizes what was kept, removed, and deferred during the final cleanup pass.
+The supported scope is intentionally narrow: inbound WhatsApp rental enquiries, one operator dashboard, local SQLite as Prosper's application and middleman store, DeepSeek-backed Pipeline stages, Stage Runs for auditability, and an authenticated WhatsApp Bridge. WhatsApp remains the visible channel transcript. The [Tradeoff Inventory](tradeoff-inventory.md) summarizes what was kept, removed, and deferred during the final cleanup pass.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ The backend owns the business workflow. The Pipeline coordinates model-backed tr
 
 The dashboard is the operator surface. It supports Rental Listing setup, Playbook / Auto Replies configuration, Simulator Conversations, inbox review, audit inspection, local media previews, and single-user session authentication. The dashboard talks to same-origin backend APIs and does not share browser session state with the bridge.
 
-The bridge is the WhatsApp channel adapter. It normalizes WhatsApp events into the backend's inbound message contract and attempts outbound sends when the backend requests them. It is authenticated separately from the dashboard, exposes only operational status, and remains experimental.
+The bridge is the WhatsApp channel adapter. It normalizes WhatsApp events into the backend's inbound message contract and attempts outbound sends when the backend requests them. It is authenticated separately from the dashboard, exposes only operational status, and remains experimental. It does not own Conversation state, matching decisions, or Playbook rendering.
 
 ## Workflow
 
@@ -30,11 +30,11 @@ The Simulator Conversation is the local walkthrough path because it exercises th
 - Stage Runs store local evidence for why a conversation was matched, blocked, or handed off.
 - The send lock can stop outbound side effects while preserving inbound processing and audit inspection.
 - Dashboard authentication uses a signed, expiring `HttpOnly` cookie. Bridge callbacks use a separate machine-to-machine token.
-- Local data and media are disposable review artifacts by default. DeepSeek-backed runs send prompt inputs to the configured DeepSeek-compatible endpoint, so real tenant personal data should not be used unless that handling has been separately approved.
+- Local SQLite data, managed media, and verified backups can include tenant messages, Conversation state, Stage Run context, model inputs and outputs, action records, media metadata, and managed property media. DeepSeek-backed runs send prompt inputs, including tenant messages and Stage Run context, to the configured DeepSeek-compatible endpoint, so real tenant personal data should not be used unless that handling has been separately approved.
 
 ## Tradeoffs
 
-Prosper keeps the local workflow complete enough to inspect end to end, while avoiding infrastructure that would imply a managed service. Reset-only SQLite, local media, a single-user password, and synchronous request handling are enough for review but are not substitutes for migrations, scheduled backups, team identity, durable jobs, or managed retention.
+Prosper keeps the local workflow complete enough to inspect end to end, while avoiding infrastructure that would imply a managed service. Reset-only SQLite, local media, a single-user password, and synchronous request handling are enough for review but are not substitutes for schema migrations, scheduled backups, team identity, durable jobs, or automatic retention deletion.
 
 The project keeps DeepSeek as the explicit live provider so prompts, schema contracts, and evals can stay concrete. Provider-neutral routing is deferred until there is a real compatibility target.
 
@@ -54,6 +54,8 @@ Use Python 3.11, `uv`, Node.js 22, and npm.
 8. Open `http://127.0.0.1:5173` and use the Simulator Conversation walkthrough from the README.
 
 The WhatsApp Bridge uses `PROSPER_BRIDGE_TOKEN`, `PROSPER_BRIDGE_BASE_URL`, `PROSPER_BRIDGE_HOST`, and `PROSPER_BRIDGE_PORT`. Existing local bridge aliases are accepted only for compatibility; new setup should use the Prosper-named variables.
+
+Prosper currently does not include schema migrations. Local schema changes are handled by resetting disposable SQLite data, and the doctor checks the current table shape directly. Backup, restore, and cleanup are explicit operator actions through `.venv/bin/python -m app.cli backup`, `.venv/bin/python -m app.cli restore <archive> --confirm-restore`, `.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup`, and `.venv/bin/python -m app.cli cleanup-backups <archive> --confirm-cleanup`. Restore does not include WhatsApp pairing credentials, so re-pairing may be required.
 
 ## What To Inspect
 
