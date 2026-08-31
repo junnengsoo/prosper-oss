@@ -48,8 +48,10 @@ Use Python 3.11, `uv`, Node.js 22, and npm.
 2. Set `DEEPSEEK_API_KEY` for the live model-backed happy path. Without it, model stages use the Manual Review fallback.
 3. Install locked backend, frontend, and bridge dependencies.
 4. Initialize resettable local data with `.venv/bin/python -m app.cli init-db`.
-5. Start the local launcher with `scripts/dev.sh`.
-6. Open `http://127.0.0.1:5173` and use the Simulator Conversation walkthrough from the README.
+5. Run `.venv/bin/python -m app.cli doctor` before startup.
+6. Start the local launcher with `scripts/dev.sh`.
+7. Run `.venv/bin/python -m app.cli doctor --strict-runtime` after the backend, dashboard, and bridge are running.
+8. Open `http://127.0.0.1:5173` and use the Simulator Conversation walkthrough from the README.
 
 The WhatsApp Bridge uses `PROSPER_BRIDGE_TOKEN`, `PROSPER_BRIDGE_BASE_URL`, `PROSPER_BRIDGE_HOST`, and `PROSPER_BRIDGE_PORT`. Existing local bridge aliases are accepted only for compatibility; new setup should use the Prosper-named variables.
 

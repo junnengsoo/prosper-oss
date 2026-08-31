@@ -88,13 +88,29 @@ Use Python 3.11, `uv`, Node.js 22 or newer, and npm. The repository includes `.n
    This installs the locked Python and Node dependencies, creates `.env` if it does not already exist, and initializes resettable local data with seeded sample configuration.
    Internally, the backend install uses `uv sync --locked --extra dev --python 3.11`: `--locked` keeps dependency versions exactly aligned with `uv.lock`, `--extra dev` includes the local test and development tools, and `--python 3.11` selects the supported backend Python version.
 
-4. Start the supported local launcher:
+4. Run the read-only Prosper doctor before startup:
+
+   ```bash
+   .venv/bin/python -m app.cli doctor
+   ```
+
+   The doctor reports `PASS`, `WARN`, and `FAIL` checks for dependencies, environment safety, the SQLite database and current tables, DeepSeek configuration, bridge-token safety, Rental Listing and enabled Playbook coverage, managed media references, and local runtime endpoints. `FAIL` results exit nonzero. `WARN` results describe degraded or unavailable optional paths, such as live services or Playbook coverage that are not ready yet in normal mode. Secret values are not printed.
+
+5. Start the supported local launcher:
 
    ```bash
    scripts/dev.sh
    ```
 
-5. Open the dashboard at `http://127.0.0.1:5173`.
+6. Open the dashboard at `http://127.0.0.1:5173`.
+
+After the backend, dashboard, and bridge are running, validate the live local stack with strict runtime checks:
+
+```bash
+.venv/bin/python -m app.cli doctor --strict-runtime
+```
+
+Strict runtime mode requires backend, dashboard, and bridge reachability and treats missing Rental Listing / enabled Playbook coverage as a failure.
 
 For a protected dashboard session, set these backend variables before launching:
 
@@ -138,7 +154,7 @@ The bridge can forward inbound messages and can attempt outbound sends. The best
 
 This repository stores local testing data by default. `.env.example` points SQLite at `runtime/prosper.sqlite3`, and media uploads are stored under `runtime/media`.
 
-SQLite is reset-only SQLite storage for this release. Database migrations are intentionally out of scope; existing local databases are disposable. To reset local application state, stop the services and remove the relevant `runtime/*.sqlite3` files, then rerun:
+SQLite is reset-only SQLite storage for this release. Prosper currently does not include schema migrations; existing local databases are disposable. The doctor reports this plainly and checks the current table shape directly. To reset local application state, stop the services and remove the relevant `runtime/*.sqlite3` files, then rerun:
 
 ```bash
 .venv/bin/python -m app.cli init-db
