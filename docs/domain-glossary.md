@@ -60,6 +60,6 @@ The safe route when the system should not send an automated response. Manual rev
 
 A local operator switch that prevents outbound action execution. It is useful for review walkthroughs where inbound processing and audit inspection should continue but tenant replies should not be sent.
 
-## Reset-Only SQLite
+## Local SQLite
 
-The local storage posture for this release. SQLite files under `runtime/` are disposable reference data. Database migrations, in-place upgrades, backups, and managed retention policies are deliberately deferred.
+The local storage posture for this release. SQLite files under `runtime/` are resettable local data. The CLI supports a narrow verified pilot backup for SQLite plus managed property media, while database migrations, in-place upgrades, restore workflows, and managed retention policies are deliberately deferred.

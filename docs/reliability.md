@@ -26,11 +26,13 @@ The Baileys bridge is experimental, and outbound WhatsApp delivery is best effor
 
 Uploaded property media is stored under `runtime/media` by default. The database stores the file path and metadata, while the authenticated backend serves previews and the WhatsApp bridge reads the same local file. Deployments must persist and back up the runtime directory.
 
+The local CLI can create a verified pilot backup of the active SQLite database and managed property media with `.venv/bin/python -m app.cli backup`. The archive is self-describing through a manifest and intentionally excludes environment files, bridge authentication state, logs, caches, build output, and previous backups.
+
 ## Privacy and Retention
 
 The default `.env.example` keeps SQLite data under `runtime/prosper.sqlite3`. Local audit records can contain inbound message text, listing details, model input snapshots, model outputs, errors, and outbound action records. DeepSeek-backed runs send prompt input to the configured DeepSeek-compatible endpoint.
 
-SQLite is reset-only local storage for this release. Existing local databases are disposable; stop the services, remove the relevant `runtime/*.sqlite3` files, and rerun `.venv/bin/python -m app.cli init-db` to rebuild seeded local data. In-place migrations, backup/restore, and managed retention policies are deferred.
+SQLite remains local storage for this release. Existing local databases are still resettable; stop the services, remove the relevant `runtime/*.sqlite3` files, and rerun `.venv/bin/python -m app.cli init-db` to rebuild seeded local data. In-place migrations, restore workflows, and managed retention policies are deferred.
 
 ## Dashboard Authentication
 

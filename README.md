@@ -144,6 +144,14 @@ SQLite is reset-only SQLite storage for this release. Database migrations are in
 .venv/bin/python -m app.cli init-db
 ```
 
+Create a verified pilot backup of the active SQLite database and managed property media with:
+
+```bash
+.venv/bin/python -m app.cli backup
+```
+
+The backup archive is written under `runtime/backups` by default and includes a manifest with file sizes and checksums. It does not include environment files, bridge authentication state, logs, caches, build output, or previous backups. Restore, migration, cleanup, and managed retention workflows remain out of scope.
+
 The simulator also has a scoped reset for fake chat data:
 
 ```bash
