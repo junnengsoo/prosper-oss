@@ -224,6 +224,13 @@ test("protects rental listing drafts while gallery changes remain immediate", as
 
   await page.getByRole("button", { name: "Listing Facts" }).click();
   await page.getByLabel("Property name").fill(savedPropertyName);
+  await page.getByRole("button", { name: "Gallery" }).click();
+  await expect(page.getByRole("heading", { name: "Gallery" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Unsaved property draft" })).toHaveCount(0);
+  expect(draftSaves.property).toBe(0);
+  expect(draftSaves.playbook).toBe(0);
+  await page.getByRole("button", { name: "Listing Facts" }).click();
+  await expect(page.getByLabel("Property name")).toHaveValue(savedPropertyName);
   await page.getByRole("button", { name: "Auto Replies" }).click();
   await page.getByLabel("Enabled").check();
   await page.getByLabel("Message 1").fill(savedReply);

@@ -476,10 +476,6 @@ function App() {
       setEditorSection(nextSection);
       return;
     }
-    if (nextSection === "gallery" && propertyWideDraftDirty) {
-      requestProtectedDraftNavigation(() => setEditorSection(nextSection));
-      return;
-    }
     setEditorSection(nextSection);
   }
 
