@@ -5,16 +5,11 @@ from collections.abc import Sequence
 from pathlib import Path
 import tarfile
 
-from sqlalchemy import select
-
-from .backup import cleanup_backup_archives, cleanup_operational_data, create_backup, restore_backup
-from .database.connection import SessionLocal, init_db
-from .database.models import PropertyPlaybook
-from .database.seed import DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS, seed_all, seed_property_playbooks
-from .services import get_all_config, update_config
-
 
 def init_database() -> None:
+    from .database.connection import SessionLocal, init_db
+    from .database.seed import seed_all
+
     init_db()
     with SessionLocal() as session:
         seed_all(session)
@@ -26,6 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command")
 
     subcommands.add_parser("init-db", help="Initialize the database and seed sample data")
+    doctor = subcommands.add_parser("doctor", help="Run read-only Prosper readiness diagnostics")
+    doctor.add_argument("--strict-runtime", action="store_true", help="Require backend, dashboard, and bridge endpoints to be reachable")
+    doctor.add_argument("--backend-url", default="http://127.0.0.1:8000", help="Backend base URL for runtime checks")
+    doctor.add_argument("--dashboard-url", default="http://127.0.0.1:5173", help="Dashboard base URL for runtime checks")
+    doctor.add_argument("--bridge-url", help="Bridge base URL for runtime checks; defaults to configured PROSPER_BRIDGE_BASE_URL")
+    doctor.add_argument("--timeout-seconds", type=float, default=1.0, help="Per-endpoint runtime check timeout")
     subcommands.add_parser("show-config", help="Show application config")
 
     backup = subcommands.add_parser("backup", help="Create a verified backup archive")
@@ -81,11 +82,29 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command in {None, "init-db"}:
         init_database()
         return
+    if args.command == "doctor":
+        from .readiness import DoctorOptions, exit_code, format_results, run_doctor
+
+        results = run_doctor(
+            DoctorOptions(
+                strict_runtime=args.strict_runtime,
+                backend_url=args.backend_url,
+                dashboard_url=args.dashboard_url,
+                bridge_url=args.bridge_url,
+                timeout_seconds=args.timeout_seconds,
+            )
+        )
+        print(format_results(results))
+        raise SystemExit(exit_code(results))
     if args.command == "backup":
+        from .backup import create_backup
+
         result = create_backup(args.output_dir, name=args.name)
         print(f"Created verified Prosper backup: {result.archive_path}")
         return
     if args.command == "restore":
+        from .backup import restore_backup
+
         confirmed = args.confirm_restore or require_confirmation(
             "Restore will replace the current SQLite database and managed property media.",
             "RESTORE",
@@ -99,6 +118,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         print("WhatsApp pairing credentials are not included; re-pairing may be required.")
         return
     if args.command == "cleanup-data":
+        from .backup import cleanup_operational_data
+
         confirmed = args.confirm_cleanup or require_confirmation(
             "Cleanup will remove only the selected operational data.",
             "CLEANUP",
@@ -116,6 +137,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             print("No selected operational data was present.")
         return
     if args.command == "cleanup-backups":
+        from .backup import cleanup_backup_archives
+
         confirmed = args.confirm_cleanup or require_confirmation(
             "Cleanup will remove only the selected backup archives.",
             "CLEANUP",
@@ -127,6 +150,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         for path in result.removed_paths:
             print(f"Removed backup archive: {path}")
         return
+
+    from sqlalchemy import select
+
+    from .database.connection import SessionLocal, init_db
+    from .database.models import PropertyPlaybook
+    from .database.seed import DEFAULT_TEST_PLAYBOOK_PROPERTY_IDS, seed_property_playbooks
+    from .services import get_all_config, update_config
 
     init_db()
     with SessionLocal() as session:

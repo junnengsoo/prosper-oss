@@ -26,13 +26,21 @@ The Baileys bridge is experimental, and outbound WhatsApp delivery is best effor
 
 Uploaded property media is stored under `runtime/media` by default. The database stores the file path and metadata, while the authenticated backend serves previews and the WhatsApp bridge reads the same local file. Deployments must persist and back up the runtime directory.
 
+## Readiness And Doctor
+
+Run `.venv/bin/python -m app.cli doctor` before startup to check local readiness without changing the database, configuration, media files, migrations, or services. The command reports `PASS`, `WARN`, and `FAIL` results and exits nonzero for required failures. Normal mode treats unavailable backend, dashboard, and bridge endpoints as warnings while still validating any endpoint that responds.
+
+Run `.venv/bin/python -m app.cli doctor --strict-runtime` after starting the local backend, dashboard, and bridge when the operator wants strict validation of the running stack. In strict runtime mode, backend, dashboard, and bridge reachability are required, and missing Rental Listing / enabled Playbook coverage is a failure.
+
+The doctor never prints secret values. It reports whether DeepSeek and bridge-token settings are present or unsafe without echoing the configured values. Prosper currently does not include schema migrations; the doctor says this plainly and checks the current SQLite table shape directly.
+
 The local CLI can create a verified backup of the active SQLite database and managed property media with `.venv/bin/python -m app.cli backup`. The archive is self-describing through a manifest and intentionally excludes environment files, bridge authentication state, logs, caches, build output, and previous backups. Restore is available with `.venv/bin/python -m app.cli restore <archive> --confirm-restore` after stopping local services; the command validates the archive first, refuses active services, preserves a rollback snapshot, and warns that WhatsApp re-pairing may be required. Without `--confirm-restore`, restore requires typing `RESTORE` interactively.
 
 ## Privacy and Retention
 
 The default `.env.example` keeps SQLite data under `runtime/prosper.sqlite3`. Local audit records can contain inbound message text, listing details, model input snapshots, model outputs, errors, and outbound action records. DeepSeek-backed runs send prompt input to the configured DeepSeek-compatible endpoint.
 
-SQLite remains local storage for this release. Existing local databases are still resettable; stop the services and use `.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup` for explicit data cleanup, or remove the relevant `runtime/*.sqlite3` files and rerun `.venv/bin/python -m app.cli init-db` to rebuild seeded local data. Cleanup commands require `--confirm-cleanup` or typing `CLEANUP` interactively. In-place migrations, scheduled backups, and managed retention policies are deferred.
+SQLite remains local storage for this release. Prosper currently does not include schema migrations. Existing local databases are still resettable; stop the services and use `.venv/bin/python -m app.cli cleanup-data --database --media --confirm-cleanup` for explicit data cleanup, or remove the relevant `runtime/*.sqlite3` files and rerun `.venv/bin/python -m app.cli init-db` to rebuild seeded local data. Cleanup commands require `--confirm-cleanup` or typing `CLEANUP` interactively. In-place migrations, scheduled backups, and managed retention policies are deferred.
 
 ## Dashboard Authentication
 
