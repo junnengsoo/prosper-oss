@@ -1,8 +1,8 @@
 # Prosper
 
-Prosper is an experimental WhatsApp rental-enquiry app for exploring how a single operator can use AI-assisted triage, local audit records, deterministic action planning, and explicit Manual Review boundaries.
+Prosper is an experimental, single-operator WhatsApp rental-enquiry workflow orchestrator for exploring AI-assisted triage, local audit records, deterministic action planning, and explicit Manual Review boundaries.
 
-The repo is intentionally small and local-first. It works best as a single-user workflow for inbound WhatsApp rental enquiries, with resettable SQLite storage, a Baileys-based WhatsApp bridge, and a simulator for manual walkthroughs.
+The repo is intentionally small and local-first. It works best as a single-user workflow for inbound WhatsApp rental enquiries. Prosper uses local SQLite as its application and middleman store, while WhatsApp remains the visible channel transcript. A Baileys-based WhatsApp bridge connects the local workflow to WhatsApp, and the simulator supports manual walkthroughs without a paired phone.
 
 ## What It Demonstrates
 
@@ -55,7 +55,7 @@ Deterministic Playbook action planner
       +--> manual review queue
 ```
 
-The FastAPI backend owns business logic, persistence, prompts, state transitions, and outbound action planning. The React dashboard provides the operator interface, Rental Listing setup, Playbook / Auto Replies setup, audit view, and Simulator Conversation surface. The TypeScript bridge owns WhatsApp connectivity and forwards normalized messages to the backend.
+The FastAPI backend owns business logic, local SQLite persistence, prompts, state transitions, and outbound action planning. The React dashboard provides the operator interface, Rental Listing setup, Playbook / Auto Replies setup, audit view, and Simulator Conversation surface. The TypeScript bridge owns WhatsApp connectivity and forwards normalized messages to the backend. WhatsApp remains the tenant-visible transcript; Prosper stores local middleman state and operational evidence used to decide what should happen next.
 
 Dashboard sessions use one configured application password rather than a user database. Successful login creates a signed, expiring `HttpOnly` cookie. The WhatsApp Bridge remains separately authenticated with `PROSPER_BRIDGE_TOKEN`; browser sessions are not used for bridge callbacks.
 
@@ -152,7 +152,7 @@ The bridge can forward inbound messages and can attempt outbound sends. The best
 
 ## Privacy and Local Data
 
-This repository stores local testing data by default. `.env.example` points SQLite at `runtime/prosper.sqlite3`, and media uploads are stored under `runtime/media`.
+This repository stores local testing data by default. `.env.example` points SQLite at `runtime/prosper.sqlite3`, and media uploads are stored under `runtime/media`. In real pilot use, tenant messages, Conversation state, Stage Run context, model inputs and outputs, action records, and media metadata may be stored locally in SQLite and runtime files.
 
 SQLite is reset-only SQLite storage for this release. Prosper currently does not include schema migrations; existing local databases are disposable. The doctor reports this plainly and checks the current table shape directly. To reset local application state, stop the services and remove the relevant `runtime/*.sqlite3` files, then rerun:
 
@@ -166,7 +166,7 @@ Create a verified backup of the active SQLite database and managed property medi
 .venv/bin/python -m app.cli backup
 ```
 
-The backup archive is written under `runtime/backups` by default and includes a manifest with file sizes and checksums. It does not include environment files, bridge authentication state, logs, caches, build output, or previous backups. In-place migrations, scheduled backups, and managed retention workflows remain out of scope.
+The backup archive is written under `runtime/backups` by default and includes a manifest with file sizes and checksums. It can include tenant messages, Conversation state, Stage Run context, model inputs and outputs, action records, media metadata, and managed property media. It does not include environment files, bridge authentication state, logs, caches, build output, or previous backups. In-place migrations, scheduled backups, and automatic retention deletion remain out of scope.
 
 Restore a verified Prosper backup only after stopping local services:
 
@@ -191,7 +191,7 @@ The simulator also has a scoped reset for fake chat data:
 scripts/fake_chat_smoke.sh --reset
 ```
 
-Do not enter real tenant personal data during walkthroughs unless everyone involved has separately approved that handling. DeepSeek-backed runs send prompt inputs to the configured DeepSeek-compatible endpoint. Local audit records may include inbound text, matched listing details, model outputs, errors, and outbound action records.
+Do not enter real tenant personal data during walkthroughs unless everyone involved has separately approved that handling. DeepSeek-backed runs send prompt inputs, including tenant message text and Stage Run context, to the configured DeepSeek-compatible endpoint. Local audit records may include inbound text, matched listing details, model inputs and outputs, errors, and outbound action records.
 
 Inbound deduplication is limited to the normalized chat identifier and message identifier received from the simulator or bridge. It protects against replayed inbound events with the same identifiers; it does not prove global person identity, prevent semantic duplicates typed as new messages, or replace channel-level delivery controls.
 
@@ -229,7 +229,7 @@ The current experimental scope deliberately excludes:
 - provider-neutral model routing or multi-provider parity;
 - durable job queues, lease ownership, transactional outbox processing, and channel idempotency keys;
 - a general-purpose identity system or multi-user roles;
-- hosted object storage, migration management, scheduled backups, and managed retention policies;
+- hosted object storage, schema migration management, scheduled backups, and automatic retention deletion;
 - an official WhatsApp Business Platform integration.
 
 These are future engineering directions, not hidden requirements for this release.

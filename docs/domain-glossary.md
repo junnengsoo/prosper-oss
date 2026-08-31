@@ -1,6 +1,14 @@
 # Domain Glossary
 
-This glossary keeps public documentation, backend names, and dashboard labels aligned for the rental-enquiry reference implementation.
+This glossary keeps public documentation, backend names, and dashboard labels aligned for the single-operator rental-enquiry pilot.
+
+## Prosper
+
+The local, stateful workflow orchestrator for this release. Prosper owns Rental Listing configuration, Playbook / Auto Replies, message deduplication, Conversation state, matching decisions, Stage Runs, Runtime Config, and outbound action records. It uses local SQLite as its application and middleman store. Prosper is not the tenant-visible chat transcript.
+
+## WhatsApp Channel Transcript
+
+The tenant-visible message history in WhatsApp. WhatsApp remains the visible channel transcript for real rental enquiries. Prosper receives normalized bridge events and may record local copies, decisions, and action attempts, but WhatsApp is still where the tenant sees the conversation.
 
 ## Rental Enquiry
 
@@ -28,11 +36,11 @@ The per-listing deterministic reply configuration. After DeepSeek returns a vali
 
 ## Simulator Conversation
 
-The supported local evaluation path in the dashboard. It accepts fake tenant messages, stores them as local conversations, runs the same backend pipeline used by bridge inbound messages, and displays the resulting transcript and audit records.
+The supported local evaluation path in the dashboard. It accepts fake tenant messages, stores them as local Prosper conversations, runs the same backend pipeline used by bridge inbound messages, and displays the resulting simulator-only transcript and audit records. It does not require WhatsApp pairing and does not become the visible WhatsApp channel transcript.
 
 ## WhatsApp Bridge
 
-The TypeScript adapter around Baileys. It normalizes WhatsApp events for the backend and attempts outbound sends when asked. It is authenticated separately from browser dashboard sessions and is experimental.
+The TypeScript adapter around Baileys. It normalizes WhatsApp events for the backend and attempts outbound sends when asked. It is authenticated separately from browser dashboard sessions and is experimental. The bridge does not own matching or Playbook decisions; Prosper does.
 
 ## Stage Run
 
@@ -62,4 +70,4 @@ A local operator switch that prevents outbound action execution. It is useful fo
 
 ## Local SQLite
 
-The local storage posture for this release. SQLite files under `runtime/` are resettable local data. The CLI supports a narrow verified backup and restore path for SQLite plus managed property media, while database migrations, in-place upgrades, scheduled backups, and managed retention policies are deliberately deferred.
+The local application and middleman store for this release. SQLite files under `runtime/` hold resettable Prosper state such as tenant message records, Conversations, Rental Listings, Playbooks, Stage Run context, Runtime Config, and outbound action records. The CLI supports a narrow verified backup and restore path for SQLite plus managed property media, while database migrations, in-place upgrades, scheduled backups, and automatic retention deletion are deliberately not implemented.
