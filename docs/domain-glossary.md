@@ -62,4 +62,4 @@ A local operator switch that prevents outbound action execution. It is useful fo
 
 ## Local SQLite
 
-The local storage posture for this release. SQLite files under `runtime/` are resettable local data. The CLI supports a narrow verified backup for SQLite plus managed property media, while database migrations, in-place upgrades, restore workflows, and managed retention policies are deliberately deferred.
+The local storage posture for this release. SQLite files under `runtime/` are resettable local data. The CLI supports a narrow verified backup and restore path for SQLite plus managed property media, while database migrations, in-place upgrades, scheduled backups, and managed retention policies are deliberately deferred.
