@@ -27,6 +27,7 @@ import {
   RUNTIME_DIR,
 } from "./config.js";
 import { fetchBridgeChatState, postInboundBatch } from "./backend.js";
+import { InboundBurstBuffers, type BurstWaitState } from "./inboundBuffer.js";
 import {
   dropReasonForMessage,
   normalizeMessage,
@@ -87,7 +88,7 @@ let latestQr: string | null = null;
 let latestQrGeneratedAtMs: number | null = null;
 let latestQrGeneration = 0;
 const bridgeStartedAtMs = Date.now();
-const inboundBuffers = new Map<string, { messages: NormalizedMessage[]; timer: NodeJS.Timeout; waitMs: number; burstMode: string }>();
+let inboundBuffers: InboundBurstBuffers<NodeJS.Timeout>;
 const droppedMessageCounts: Partial<Record<MessageDropReason | "normalize_failed", number>> = {};
 const disconnectCounts: Record<string, number> = {};
 const recentMessageStore = new Map<string, proto.IMessage>();
@@ -136,7 +137,6 @@ function errorName(error: unknown): string {
 }
 
 function bridgeStatus(): Record<string, unknown> {
-  const bufferedMessageCount = Array.from(inboundBuffers.values()).reduce((total, buffer) => total + buffer.messages.length, 0);
   return {
     ok: true,
     bridge: "prosper-bridge",
@@ -157,8 +157,8 @@ function bridgeStatus(): Record<string, unknown> {
     triage_burst_wait_ms: WHATSAPP_TRIAGE_BURST_WAIT_MS,
     active_burst_wait_ms: WHATSAPP_ACTIVE_BURST_WAIT_MS,
     max_backfill_ms: WHATSAPP_MAX_BACKFILL_MS,
-    buffered_chat_count: inboundBuffers.size,
-    buffered_message_count: bufferedMessageCount,
+    buffered_chat_count: inboundBuffers.chatCount(),
+    buffered_message_count: inboundBuffers.messageCount(),
     dropped_message_counts: droppedMessageCounts,
     pairing_phone_configured: Boolean(WHATSAPP_PAIRING_PHONE_NUMBER),
     pairing: pairingStatus({
@@ -509,10 +509,7 @@ async function gracefulShutdown(): Promise<void> {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  for (const [chatJid, buffer] of inboundBuffers) {
-    clearTimeout(buffer.timer);
-    await flushInboundBuffer(chatJid);
-  }
+  await inboundBuffers.flushAll();
   if (sendServer) {
     await new Promise<void>((resolve) => {
       sendServer?.close(() => resolve());
@@ -643,44 +640,7 @@ function scheduleReconnect(baseDelayMs: number): void {
   }, delayMs);
 }
 
-async function flushInboundBuffer(chatJid: string): Promise<void> {
-  const buffer = inboundBuffers.get(chatJid);
-  if (!buffer) return;
-  inboundBuffers.delete(chatJid);
-
-  const messages = buffer.messages.sort((a, b) => a.timestampMs - b.timestampMs);
-  try {
-    await postInboundBatch(messages);
-    lastForwardedMessageAt = new Date().toISOString();
-    lastBackendForwardError = null;
-    forwardedBatchCount += 1;
-    console.log(
-      `[bridge] forwarded batch chat=${chatJid} count=${messages.length} text_len=${messages.reduce((total, message) => total + message.text.length, 0)}`,
-    );
-  } catch (error) {
-    backendForwardFailureCount += 1;
-    lastBackendForwardError = error instanceof Error ? error.message : String(error);
-    console.error(`[bridge] failed to forward message batch error_name=${errorName(error)}`);
-  }
-}
-
-async function forwardImmediate(message: NormalizedMessage): Promise<void> {
-  try {
-    await postInboundBatch([message]);
-    lastForwardedMessageAt = new Date().toISOString();
-    lastBackendForwardError = null;
-    forwardedImmediateCount += 1;
-    console.log(
-      `[bridge] forwarded immediate chat=${message.chatJid} fromMe=${message.fromMe} id=${message.messageId} text_len=${message.text.length}`,
-    );
-  } catch (error) {
-    backendForwardFailureCount += 1;
-    lastBackendForwardError = error instanceof Error ? error.message : String(error);
-    console.error(`[bridge] failed to forward immediate message error_name=${errorName(error)}`);
-  }
-}
-
-async function burstWaitForChat(chatJid: string): Promise<{ waitMs: number; burstMode: string }> {
+async function burstWaitForChat(chatJid: string): Promise<BurstWaitState> {
   try {
     const state = await fetchBridgeChatState(chatJid);
     if (state.burst_mode === "active_conversation") {
@@ -695,6 +655,33 @@ async function burstWaitForChat(chatJid: string): Promise<{ waitMs: number; burs
   }
   return { waitMs: WHATSAPP_TRIAGE_BURST_WAIT_MS, burstMode: "triage_fallback" };
 }
+
+inboundBuffers = new InboundBurstBuffers<NodeJS.Timeout>({
+  fetchBurstState: burstWaitForChat,
+  postInboundBatch,
+  onBatchForwarded(chatJid, messages) {
+    lastForwardedMessageAt = new Date().toISOString();
+    lastBackendForwardError = null;
+    forwardedBatchCount += 1;
+    console.log(
+      `[bridge] forwarded batch chat=${chatJid} count=${messages.length} text_len=${messages.reduce((total, message) => total + message.text.length, 0)}`,
+    );
+  },
+  onImmediateForwarded(message) {
+    lastForwardedMessageAt = new Date().toISOString();
+    lastBackendForwardError = null;
+    forwardedImmediateCount += 1;
+    console.log(
+      `[bridge] forwarded immediate chat=${message.chatJid} fromMe=${message.fromMe} id=${message.messageId} text_len=${message.text.length}`,
+    );
+  },
+  onForwardError(error, context) {
+    backendForwardFailureCount += 1;
+    lastBackendForwardError = error instanceof Error ? error.message : String(error);
+    const label = context.kind === "batch" ? "message batch" : "immediate message";
+    console.error(`[bridge] failed to forward ${label} error_name=${errorName(error)}`);
+  },
+});
 
 async function bufferMessage(message: WAMessage): Promise<void> {
   const normalized = normalizeMessage(message);
@@ -721,30 +708,7 @@ async function bufferMessage(message: WAMessage): Promise<void> {
     return;
   }
 
-  if (normalized.fromMe) {
-    void flushInboundBuffer(normalized.chatJid).then(() => forwardImmediate(normalized));
-    return;
-  }
-
-  const existing = inboundBuffers.get(normalized.chatJid);
-  if (existing) {
-    clearTimeout(existing.timer);
-    existing.messages.push(normalized);
-  }
-
-  const messages = existing?.messages ?? [normalized];
-  const waitState = existing
-    ? { waitMs: existing.waitMs, burstMode: existing.burstMode }
-    : await burstWaitForChat(normalized.chatJid);
-  const timer = setTimeout(() => {
-    void flushInboundBuffer(normalized.chatJid);
-  }, Math.max(0, waitState.waitMs));
-  inboundBuffers.set(normalized.chatJid, { messages, timer, ...waitState });
-
-  if (waitState.waitMs <= 0) {
-    clearTimeout(timer);
-    void flushInboundBuffer(normalized.chatJid);
-  }
+  await inboundBuffers.receive(normalized);
 }
 
 async function connectSocket(): Promise<void> {
