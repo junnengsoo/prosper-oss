@@ -1,17 +1,20 @@
-import { Bath, BedDouble, Plus, Search, Trash2 } from "lucide-react";
-import type { PropertyRecord } from "../api";
+import { Bath, BedDouble, Image as ImageIcon, Plus, Search, Trash2 } from "lucide-react";
+import type { PlaybookBlock, PropertyPlaybook, PropertyRecord, RuntimeConfigValues } from "../api";
+import { effectiveAutoReplyInput } from "../playbookState";
 import {
   classNames,
   EmptyState,
   formatMoney,
-  GalleryPreview,
   propertyAvailabilityLabel,
   propertyAvailabilityTone,
+  replacePlaceholders,
 } from "../viewHelpers";
 import "./properties.css";
 
 export function PropertiesView({
   properties,
+  playbooks,
+  config,
   selectedPropertyIds,
   setSelectedPropertyIds,
   search,
@@ -21,6 +24,8 @@ export function PropertiesView({
   onDeleteSelected,
 }: {
   properties: PropertyRecord[];
+  playbooks: PropertyPlaybook[];
+  config: RuntimeConfigValues;
   selectedPropertyIds: string[];
   setSelectedPropertyIds: React.Dispatch<React.SetStateAction<string[]>>;
   search: string;
@@ -77,9 +82,16 @@ export function PropertiesView({
         {properties.length === 0 && <EmptyState title="No properties yet" body="Create or seed properties to manage listing workflows." />}
         {properties.map((property) => {
           const enabledMedia = property.media.filter((media) => media.enabled);
+          const playbook = playbooks.find((item) => item.property_id === property.property_id);
+          const autoReplyInput = effectiveAutoReplyInput(playbook);
           return (
             <article key={property.property_id} className="listingCard">
-              <div className="listingImage"><GalleryPreview media={property.media} /></div>
+              <ListingAutoReplyPreview
+                property={property}
+                playbook={playbook}
+                blocks={autoReplyInput.initial_reply_blocks}
+                config={config}
+              />
               <div className="listingBody">
                 <div className="listingTop">
                   <div>
@@ -121,5 +133,47 @@ export function PropertiesView({
         })}
       </div>
     </section>
+  );
+}
+
+function ListingAutoReplyPreview({
+  property,
+  playbook,
+  blocks,
+  config,
+}: {
+  property: PropertyRecord;
+  playbook?: PropertyPlaybook | null;
+  blocks: PlaybookBlock[];
+  config: RuntimeConfigValues;
+}) {
+  const enabled = playbook?.enabled ?? false;
+  const messageBlocks = blocks.filter((block) => block.type === "message").slice(0, 2);
+  const hasGallery = blocks.some((block) => block.type === "gallery");
+  const enabledMediaCount = property.media.filter((item) => item.enabled).length;
+
+  return (
+    <div className={classNames("listingReplyPreview", !enabled && "disabled")}>
+      <div className="replyPreviewTop">
+        <span>{enabled ? "Available reply" : "Auto reply off"}</span>
+      </div>
+      <div className="replyPreviewChat">
+        {enabled && messageBlocks.length > 0 ? (
+          messageBlocks.map((block, index) => (
+            <div key={`${property.property_id}-${index}`} className="replyPreviewBubble">
+              {replacePlaceholders(block.text || "", property, config)}
+            </div>
+          ))
+        ) : (
+          <div className="replyPreviewEmpty">{enabled ? "No message configured" : "Enable Auto Replies to send messages"}</div>
+        )}
+        {enabled && hasGallery && (
+          <div className="replyPreviewMedia">
+            <ImageIcon size={14} />
+            {enabledMediaCount} media
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

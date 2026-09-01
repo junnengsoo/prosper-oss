@@ -677,6 +677,25 @@ def test_playbook_crud(session):
     assert "RTF-001" in {row.property_id for row in list_property_playbooks(session)}
 
 
+def test_property_playbooks_list_route_returns_saved_playbooks(api_client, session):
+    add_property(session, "RTF-LIST")
+    upsert_property_playbook(
+        session,
+        "RTF-LIST",
+        PropertyPlaybookIn(initial_reply_blocks=[{"type": "message", "text": "Listed reply"}], enabled=True),
+    )
+    session.commit()
+
+    response = api_client.get("/api/property-playbooks")
+
+    assert response.status_code == 200
+    rows = response.json()
+    row = next(item for item in rows if item["property_id"] == "RTF-LIST")
+    assert row["enabled"] is True
+    assert row["initial_reply_blocks"][0]["type"] == "message"
+    assert row["initial_reply_blocks"][0]["text"] == "Listed reply"
+
+
 def test_seed_creates_starter_playbooks_for_seeded_properties(session):
     add_property(session, "RTF-002")
     seed_property_playbooks(session, {"RTF-002"})

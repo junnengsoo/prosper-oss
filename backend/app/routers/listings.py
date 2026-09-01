@@ -13,7 +13,7 @@ from ..database.connection import get_session
 from ..database.models import Property, PropertyMedia, PropertyPlaybook
 from ..dependencies import DashboardContext
 from ..media_storage import delete_stored_file, describe_media_storage, media_content_type, store_uploaded_file
-from ..playbooks import get_property_playbook, upsert_property_playbook
+from ..playbooks import get_property_playbook, list_property_playbooks, upsert_property_playbook
 from ..schemas import (
     PropertyBulkDeleteIn,
     PropertyDeleteSummaryOut,
@@ -57,6 +57,14 @@ def create_or_update_property(
     session.commit()
     session.refresh(property_)
     return property_
+
+
+@router.get("/api/property-playbooks", response_model=list[PropertyPlaybookOut])
+def list_property_playbooks_route(
+    session: Session = Depends(get_session),
+    context: RequestContext = DashboardContext,
+) -> list[PropertyPlaybook]:
+    return list_property_playbooks(session)
 
 
 @router.post("/api/properties/bulk-delete", response_model=PropertyDeleteSummaryOut)

@@ -24,6 +24,7 @@ import {
   type PipelineInspection,
   type PropertyInput,
   type PropertyMedia,
+  type PropertyPlaybook,
   type PropertyPlaybookInput,
   type PropertyRecord,
   type RuntimeConfigKey,
@@ -84,6 +85,7 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
+  const [playbooks, setPlaybooks] = useState<PropertyPlaybook[]>([]);
   const [stageRuns, setStageRuns] = useState<StageRun[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [whatsappPanelOpen, setWhatsappPanelOpen] = useState(false);
@@ -175,11 +177,12 @@ function App() {
       api.contacts(),
       api.conversations(true),
       includeSetup ? api.properties() : Promise.resolve(null),
+      includeSetup ? api.playbooks() : Promise.resolve(null),
       api.stageRuns(),
       includeSetup ? api.config() : Promise.resolve(null),
       api.runtimeStatus(),
     ]);
-    const [contactsResult, conversationsResult, propertiesResult, stageResult, configResult, runtimeResult] = results;
+    const [contactsResult, conversationsResult, propertiesResult, playbooksResult, stageResult, configResult, runtimeResult] = results;
     const nextWarnings: string[] = [];
 
     if (contactsResult.status === "fulfilled") setContacts(contactsResult.value);
@@ -188,6 +191,8 @@ function App() {
     else nextWarnings.push(`Conversations: ${conversationsResult.reason}`);
     if (propertiesResult.status === "fulfilled" && propertiesResult.value) setProperties(propertiesResult.value);
     else if (propertiesResult.status === "rejected") nextWarnings.push(`Properties: ${propertiesResult.reason}`);
+    if (playbooksResult.status === "fulfilled" && playbooksResult.value) setPlaybooks(playbooksResult.value);
+    else if (playbooksResult.status === "rejected") nextWarnings.push(`Playbooks: ${playbooksResult.reason}`);
     if (stageResult.status === "fulfilled") setStageRuns(stageResult.value);
     else nextWarnings.push(`Stage runs: ${stageResult.reason}`);
     if (configResult.status === "fulfilled" && configResult.value) setConfig(configResult.value.values);
@@ -730,6 +735,8 @@ function App() {
         {activeView === "properties" && !editingPropertyId && (
           <PropertiesView
             properties={filteredProperties}
+            playbooks={playbooks}
+            config={config}
             selectedPropertyIds={selectedPropertyIds}
             setSelectedPropertyIds={setSelectedPropertyIds}
             search={propertySearch}

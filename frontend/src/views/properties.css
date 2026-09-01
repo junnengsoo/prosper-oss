@@ -76,17 +76,6 @@
   overflow: hidden;
 }
 
-.listingImage {
-  min-height: 180px;
-  background: var(--surface-mid);
-}
-
-.listingImage .galleryPreviewImage {
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-}
-
 .listingBody {
   padding: 18px 22px;
   display: grid;
@@ -164,6 +153,84 @@
   justify-content: flex-end;
 }
 
+.listingReplyPreview {
+  height: 100%;
+  min-height: 180px;
+  background: #f2f5f1;
+  border-right: 1px solid var(--border);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.listingReplyPreview.disabled {
+  background: var(--surface-low);
+}
+
+.replyPreviewTop {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 11px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.replyPreviewTop span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.replyPreviewChat {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 12px 12px 20px;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 22px), transparent 100%);
+}
+
+.replyPreviewBubble {
+  align-self: flex-end;
+  max-width: 94%;
+  border-radius: 7px;
+  background: #d8ffc4;
+  color: #10200c;
+  padding: 8px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.32;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.replyPreviewEmpty {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.replyPreviewMedia {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #405044;
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
 @media (max-width: 760px) {
   .propertiesPage {
     padding: 14px;
@@ -196,8 +263,10 @@
     grid-template-columns: 1fr;
   }
 
-  .listingImage {
+  .listingReplyPreview {
     min-height: 130px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .listingBody {

@@ -34,7 +34,10 @@ test("dashboard configures listings, audits simulator decisions, and stays usabl
     configureAutoReplies: true,
     replyText: availableReply,
   });
-  await expect(page.getByText(availableName)).toBeVisible();
+  const availableListingCard = page.locator(".listingCard", { hasText: availableName });
+  await expect(availableListingCard.getByRole("heading", { name: availableName })).toBeVisible();
+  await expect(availableListingCard.locator(".listingReplyPreview")).toBeVisible();
+  await expect(availableListingCard.locator(".replyPreviewBubble", { hasText: availableReply })).toBeVisible();
 
   await createListingThroughEditor(page, {
     propertyName: unavailableName,
@@ -43,7 +46,7 @@ test("dashboard configures listings, audits simulator decisions, and stays usabl
     rent: "3900",
     configureAutoReplies: false,
   });
-  await expect(page.getByText(unavailableName)).toBeVisible();
+  await expect(page.locator(".listingCard", { hasText: unavailableName }).getByRole("heading", { name: unavailableName })).toBeVisible();
   await expect(page.getByText("Not available").first()).toBeVisible();
   await expectUsableViewport(page, [
     page.getByRole("button", { name: /New Listing/ }),
